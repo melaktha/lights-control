@@ -84,6 +84,7 @@ section.panel { background: var(--surface); border: 1px solid var(--line); borde
 .panel-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
 .panel-head .titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.grid2 > .field { justify-content: flex-end; } /* inputs line up even if a label wraps */
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 label, .label { font-size: 0.82rem; color: var(--muted); }
 input[type=time], input[type=number], input[type=text], input[type=password] {
@@ -342,9 +343,9 @@ button:disabled { opacity: .5; cursor: progress; }
       <div class="grid2">${endpoint("sunrise-from", "From", s.from)}${endpoint("sunrise-to", "To", s.to)}</div>
       ${chipLights("sunrise-lights", s.lights)}`;
     $("#p-tl40").innerHTML = head("tl40", "Light therapy · with the sunrise", "TL40", t) + `
-      <div class="grid2"><div class="field"><label for="tl40-delay">Minutes after sunrise starts</label><input type="number" inputmode="numeric" id="tl40-delay" min="0" max="60" value="${t.delay_min}"></div>
-      <div class="field"><label for="tl40-dur">Stays on (min)</label><input type="number" inputmode="numeric" id="tl40-dur" min="5" max="120" value="${t.on_min}"></div></div>
-      <p class="note">On <b class="num" id="tl40-when"></b>, on the sunrise days. The plug switches the lamp off by itself; leave the TL40's own switch on.</p>`;
+      <div class="grid2"><div class="field"><label for="tl40-delay">Delay (min)</label><input type="number" inputmode="numeric" id="tl40-delay" min="0" max="60" value="${t.delay_min}"></div>
+      <div class="field"><label for="tl40-dur">On for (min)</label><input type="number" inputmode="numeric" id="tl40-dur" min="5" max="120" value="${t.on_min}"></div></div>
+      <p class="note">Starts after the sunrise begins: on <b class="num" id="tl40-when"></b>, on the sunrise days. The plug switches the lamp off by itself; leave the TL40's own switch on.</p>`;
     $("#p-warm").innerHTML = head("warm", "Evening", "Warm colour", w) + `
       <div class="grid2"><div class="field"><label for="warm-time">From</label><input type="time" id="warm-time" value="${w.time}"></div>
       <div class="field"><span class="label">Colour</span><div class="swatch" id="warm-sw" style="height:44px"></div></div></div>
