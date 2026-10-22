@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lights">
+<meta name="theme-color" content="#16130f">
+<title>Bedroom Lights</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2316130f'/%3E%3Ccircle cx='32' cy='38' r='14' fill='%23ffb35c'/%3E%3Crect x='8' y='38' width='48' height='18' fill='%2316130f'/%3E%3Crect x='12' y='40' width='40' height='3' rx='1.5' fill='%2384a9ff'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2316130f'/%3E%3Ccircle cx='32' cy='38' r='14' fill='%23ffb35c'/%3E%3Crect x='8' y='38' width='48' height='18' fill='%2316130f'/%3E%3Crect x='12' y='40' width='40' height='3' rx='1.5' fill='%2384a9ff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one phone column; a 24-hour light strip on top, then one panel per routine, quick controls, setup. Dark-first for a bedroom at night. */
+:root {
+  --bg: #16130f;          /* lamp-off room */
+  --surface: #211d18;
+  --line: #3a332b;
+  --fg: #f3ece2;
+  --muted: #a99d8e;
+  --warm: #ffb35c;        /* 2000K */
+  --cool: #9fc0ff;        /* 9000K */
+  --accent: #ffb35c;
+  --ok: #7fd18b;
+  --bad: #ff7a6b;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f6f2ec; --surface: #fffdf9; --line: #e2d9cc; --fg: #221c15; --muted: #6f6355;
+    --warm: #d97a10; --cool: #3d6fd8; --accent: #c4670a; --ok: #2f8a3e; --bad: #c43d2c;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f6f2ec; --surface: #fffdf9; --line: #e2d9cc; --fg: #221c15; --muted: #6f6355;
+  --warm: #d97a10; --cool: #3d6fd8; --accent: #c4670a; --ok: #2f8a3e; --bad: #c43d2c;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.5 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-bottom, 0px));
+}
+main { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1, h2 { font-family: var(--display); font-weight: 700; margin: 0; text-wrap: balance; }
+h1 { font-size: 1.9rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.25rem; }
+.eyebrow { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+header { display: flex; flex-direction: column; gap: 6px; }
+header p { margin: 0; color: var(--muted); }
+
+/* 24h strip */
+.day { display: flex; flex-direction: column; gap: 8px; }
+.strip { position: relative; height: 56px; border-radius: 10px; background: #0b0a08; overflow: hidden; border: 1px solid var(--line); }
+.strip .seg { position: absolute; top: 0; bottom: 0; }
+.strip .tick { position: absolute; bottom: 0; width: 1px; height: 8px; background: var(--line); }
+.hours { position: relative; height: 1rem; font: 0.7rem var(--mono); color: var(--muted); }
+.hours span { position: absolute; transform: translateX(-50%); }
+.now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg); box-shadow: 0 0 0 2px #0b0a08; }
+
+section.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px; display: flex; flex-direction: column; gap: 16px; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.panel-head .when { font: 500 1.5rem var(--mono); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+label, .label { font-size: 0.82rem; color: var(--muted); }
+input[type=time], input[type=number], input[type=text], input[type=password] {
+  font: 500 1rem var(--mono); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; min-width: 0;
+}
+input:focus-visible, button:focus-visible, .chip:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.endpoint { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); min-width: 0; }
+.swatch { height: 34px; border-radius: 6px; border: 1px solid var(--line); display: flex; align-items: flex-end; justify-content: flex-end; padding: 3px 6px; font: 500 0.75rem var(--mono); color: #1b1610; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.rangeval { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--muted); }
+.rangeval b { color: var(--fg); font: 500 0.9rem var(--mono); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { position: relative; }
+.chip input { position: absolute; opacity: 0; inset: 0; margin: 0; }
+.chip span { display: inline-block; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.chip input:checked + span { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--muted); }
+.switch input { width: 44px; height: 26px; appearance: none; -webkit-appearance: none; background: var(--line); border-radius: 999px; position: relative; cursor: pointer; margin: 0; transition: background .2s; flex: none; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--fg); transition: transform .2s; }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { transform: translateX(18px); background: #1b1610; }
+details { border-top: 1px dashed var(--line); padding-top: 12px; }
+summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+details[open] summary { margin-bottom: 12px; }
+
+button { font: 700 0.95rem var(--body); border-radius: 10px; padding: 12px 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); color: #1b1610; border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: progress; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.row > button { flex: 1 1 140px; }
+.savebar { position: sticky; bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+.budget { display: flex; justify-content: space-between; gap: 8px; font-size: 0.82rem; color: var(--muted); }
+.budget .bar { flex: 1; height: 6px; border-radius: 3px; background: var(--line); align-self: center; overflow: hidden; }
+.budget .bar i { display: block; height: 100%; background: var(--ok); }
+.toast { font-size: 0.9rem; min-height: 1.3em; }
+.toast.err { color: var(--bad); }
+.toast.ok { color: var(--ok); }
+.runs { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; }
+.runs a { color: var(--fg); text-decoration: none; display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.dot.success { background: var(--ok); } .dot.failure { background: var(--bad); } .dot.in_progress, .dot.queued { background: var(--accent); }
+#app { display: contents; }
+#app[hidden] { display: none; }
+.note { font-size: 0.85rem; color: var(--muted); margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="eyebrow">Bedroom · circadian schedule</span>
+    <h1>Bedroom Lights</h1>
+    <p id="subtitle">Sunrise, evening and bedtime for the Lyra, the bulb and the TL40.</p>
+  </header>
+
+  <div class="day" aria-label="Light across the day">
+    <div class="strip" id="strip"></div>
+    <div class="hours" id="hours"></div>
+  </div>
+
+  <section class="panel" id="setup" hidden>
+    <h2>Connect to GitHub</h2>
+    <p class="note">Paste a fine-grained token for <span class="num">bedroom-lights</span> with Contents, Actions and Workflows set to Read and write. It stays in this browser.</p>
+    <div class="field"><label for="tok">Token</label><input id="tok" type="password" autocomplete="off" placeholder="github_pat_…"></div>
+    <div class="field"><label for="repo">Repository</label><input id="repo" type="text" value="melaktha/bedroom-lights"></div>
+    <button class="primary" id="connect">Connect</button>
+  </section>
+
+  <div id="app" hidden>
+    <section class="panel" id="p-sunrise"></section>
+    <section class="panel" id="p-evening"></section>
+    <section class="panel" id="p-bedtime"></section>
+
+    <section class="panel">
+      <h2>Right now</h2>
+      <div class="chips" id="now-lights"></div>
+      <div class="field">
+        <div class="rangeval"><span>Colour</span><b id="now-k-v">4000 K</b></div>
+        <input type="range" id="now-k" min="2000" max="9000" step="100" value="4000">
+      </div>
+      <div class="field">
+        <div class="rangeval"><span>Brightness</span><b id="now-b-v">60 %</b></div>
+        <input type="range" id="now-b" min="1" max="100" step="1" value="60">
+      </div>
+      <div class="swatch" id="now-sw"></div>
+      <div class="row">
+        <button class="primary" data-act="apply">Apply</button>
+        <button data-act="off">Turn off</button>
+      </div>
+      <div class="row">
+        <button data-act="sunrise">Run sunrise</button>
+        <button data-act="evening">Run evening</button>
+        <button data-act="bedtime">Run bedtime</button>
+        <button data-act="tl40">TL40 30 min</button>
+      </div>
+      <p class="note">Commands go through GitHub and take about half a minute to reach the lamps.</p>
+      <div class="runs" id="runs"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Devices</h2>
+      <div class="grid2">
+        <div class="field"><label for="id-lyra">Shelly ID · Lyra plug</label><input id="id-lyra" type="text" placeholder="b48a0a1cd978"></div>
+        <div class="field"><label for="id-tl40">Shelly ID · TL40 plug</label><input id="id-tl40" type="text" placeholder="b48a0a1cd978"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="lead">Start runs early (min)</label><input id="lead" type="number" min="2" max="20"></div>
+        <div class="field"><label for="step">Ramp step (s)</label><input id="step" type="number" min="15" max="300"></div>
+      </div>
+      <button id="forget">Forget token on this device</button>
+    </section>
+
+    <div class="savebar">
+      <div class="budget"><span>Actions minutes / month</span><span class="bar"><i id="budget-bar"></i></span><span class="num" id="budget">–</span></div>
+      <button class="primary" id="save">Save schedule</button>
+      <div class="toast" id="toast" role="status"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  const DAYS = ["mon","tue","wed","thu","fri","sat","sun"];
+  const DAY_LABEL = {mon:"Mo",tue:"Tu",wed:"We",thu:"Th",fri:"Fr",sat:"Sa",sun:"Su"};
+  const WF = ".github/workflows/lights.yml";
+  const $ = (s) => document.querySelector(s);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} },
+  };
+  let token = store.get("bl.token");
+  let repo = store.get("bl.repo") || "melaktha/bedroom-lights";
+  let cfg = null, cfgSha = null;
+
+  // ---------- colour temperature → sRGB (Tanner Helland approximation)
+  function kelvinRGB(k) {
+    const t = k / 100; let r, g, b;
+    r = t <= 66 ? 255 : 329.698727446 * Math.pow(t - 60, -0.1332047592);
+    g = t <= 66 ? 99.4708025861 * Math.log(t) - 161.1195681661 : 288.1221695283 * Math.pow(t - 60, -0.0755148492);
+    b = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+    const c = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    return [c(r), c(g), c(b)];
+  }
+  function lightColor(k, pct) {
+    const [r, g, b] = kelvinRGB(k);
+    const f = 0.18 + 0.82 * Math.pow(pct / 100, 0.6);
+    return `rgb(${Math.round(r * f)},${Math.round(g * f)},${Math.round(b * f)})`;
+  }
+
+  // ---------- GitHub API
+  async function gh(path, opts = {}) {
+    const res = await fetch(`https://api.github.com/repos/${repo}${path}`, {
+      ...opts,
+      headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`,
+                 "X-GitHub-Api-Version": "2022-11-28", ...(opts.headers || {}) },
+    });
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { msg = (await res.json()).message || msg; } catch {}
+      const hint = res.status === 401 ? " Check the token." :
+                   res.status === 403 || res.status === 404 ? " Check the token's repository and permissions." : "";
+      throw new Error(`GitHub ${res.status}: ${msg}.${hint}`);
+    }
+    return res.status === 204 ? null : res.json();
+  }
+  const b64dec = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), (c) => c.charCodeAt(0)));
+  const b64enc = (s) => { const bytes = new TextEncoder().encode(s); let bin = ""; bytes.forEach((b) => bin += String.fromCharCode(b)); return btoa(bin); };
+  async function getFile(path) {
+    const f = await gh(`/contents/${path}`);
+    return { text: b64dec(f.content), sha: f.sha };
+  }
+  async function putFile(path, text, sha, message) {
+    return gh(`/contents/${path}`, { method: "PUT", body: JSON.stringify({ message, content: b64enc(text), sha }) });
+  }
+
+  // ---------- schedule maths (mirrors lights.py)
+  function cronLines(c) {
+    const lead = Number(c.lead_minutes || 6), set = new Set();
+    for (const r of Object.values(c.routines)) {
+      if (!r.enabled) continue;
+      const [hh, mm] = r.time.split(":").map(Number);
+      for (const off of [1, 2]) {
+        const t = (((hh * 60 + mm - lead - off * 60) % 1440) + 1440) % 1440;
+        set.add(`${t % 60} ${Math.floor(t / 60)} * * *`);
+      }
+    }
+    if (!set.size) return ["0 0 1 1 *"];
+    return [...set].sort((a, b) => { const [am, ah] = a.split(" ").map(Number), [bm, bh] = b.split(" ").map(Number); return ah - bh || am - bm; });
+  }
+  function monthlyMinutes(c) {
+    const lead = Number(c.lead_minutes || 6); let perWeek = 0;
+    for (const [name, r] of Object.entries(c.routines)) {
+      if (!r.enabled) continue;
+      const days = (r.days || DAYS).length;
+      const run = lead + (r.duration_min || 0) + 2 + (name === "sunrise" ? 1 : 0);
+      perWeek += days * (run + 1) + (7 - days) * 2; // +1 / 2 = the other daylight-saving slot
+    }
+    return Math.round(perWeek * 30.4 / 7);
+  }
+
+  // ---------- rendering
+  function chipDays(id, days) {
+    return `<div class="chips" id="${id}">${DAYS.map((d) =>
+      `<label class="chip"><input type="checkbox" value="${d}" ${days.includes(d) ? "checked" : ""}><span>${DAY_LABEL[d]}</span></label>`).join("")}</div>`;
+  }
+  function chipLights(id, selected) {
+    return `<div class="chips" id="${id}">${Object.entries(cfg.govee_lights).map(([k, l]) =>
+      `<label class="chip"><input type="checkbox" value="${k}" ${selected.includes(k) ? "checked" : ""}><span>${l.name}</span></label>`).join("")}</div>`;
+  }
+  function endpoint(pfx, title, v) {
+    return `<div class="endpoint"><span class="label">${title}</span>
+      <div class="swatch" id="${pfx}-sw"></div>
+      <div class="rangeval"><span>K</span><b id="${pfx}-k-v"></b></div>
+      <input type="range" id="${pfx}-k" min="2000" max="9000" step="100" value="${v.kelvin}" aria-label="${title} colour temperature">
+      <div class="rangeval"><span>%</span><b id="${pfx}-b-v"></b></div>
+      <input type="range" id="${pfx}-b" min="1" max="100" step="1" value="${v.brightness}" aria-label="${title} brightness"></div>`;
+  }
+  function head(name, title, r) {
+    return `<div class="panel-head"><div><span class="eyebrow">${title}</span><h2 class="when" id="${name}-when">${r.time}</h2></div>
+      <label class="switch"><input type="checkbox" id="${name}-on" ${r.enabled ? "checked" : ""}> On</label></div>`;
+  }
+  function renderPanels() {
+    const s = cfg.routines.sunrise, e = cfg.routines.evening, b = cfg.routines.bedtime;
+    $("#p-sunrise").innerHTML = head("sunrise", "Morning · warm to cool", s) + `
+      <div class="grid2"><div class="field"><label for="sunrise-time">Start</label><input type="time" id="sunrise-time" value="${s.time}"></div>
+      <div class="field"><label for="sunrise-dur">Ramp (min)</label><input type="number" id="sunrise-dur" min="1" max="60" value="${s.duration_min}"></div></div>
+      ${chipDays("sunrise-days", s.days)}
+      <div class="grid2">${endpoint("sunrise-from", "From", s.from)}${endpoint("sunrise-to", "To", s.to)}</div>
+      ${chipLights("sunrise-lights", s.lights)}
+      <details><summary>TL40 light therapy</summary>
+        <div class="field" style="gap:12px">
+          <label class="switch"><input type="checkbox" id="tl-on" ${s.tl40?.enabled ? "checked" : ""}> Switch on with sunrise</label>
+          <div class="grid2"><div class="field"><label for="tl-delay">Minutes after start</label><input type="number" id="tl-delay" min="0" max="60" value="${s.tl40?.delay_min ?? 1}"></div>
+          <div class="field"><label for="tl-dur">Stays on (min)</label><input type="number" id="tl-dur" min="5" max="120" value="${s.tl40?.on_min ?? 30}"></div></div>
+        </div></details>`;
+    $("#p-evening").innerHTML = head("evening", "Evening · cool to warm", e) + `
+      <div class="grid2"><div class="field"><label for="evening-time">Start</label><input type="time" id="evening-time" value="${e.time}"></div>
+      <div class="field"><label for="evening-dur">Fade (min)</label><input type="number" id="evening-dur" min="1" max="120" value="${e.duration_min}"></div></div>
+      ${chipDays("evening-days", e.days)}
+      <div class="grid2">${endpoint("evening-from", "From", e.from)}${endpoint("evening-to", "To", e.to)}</div>
+      ${chipLights("evening-lights", e.lights)}`;
+    $("#p-bedtime").innerHTML = head("bedtime", "Night · everything off", b) + `
+      <div class="field"><label for="bedtime-time">Lights off at</label><input type="time" id="bedtime-time" value="${b.time}"></div>
+      ${chipDays("bedtime-days", b.days)}
+      ${chipLights("bedtime-lights", b.lights)}
+      <label class="switch"><input type="checkbox" id="cut" ${b.cut_lyra_power !== false ? "checked" : ""}> Cut the Lyra's power (hides the blue segment)</label>
+      <p class="note">Each light is left at its warmest, dimmest setting first, so it wakes up gently.</p>`;
+    $("#now-lights").innerHTML = Object.entries(cfg.govee_lights).map(([k, l]) =>
+      `<label class="chip"><input type="checkbox" value="${k}" checked><span>${l.name}</span></label>`).join("");
+    $("#id-lyra").value = cfg.shelly_plugs?.lyra?.id || "";
+    $("#id-tl40").value = cfg.shelly_plugs?.tl40?.id || "";
+    $("#lead").value = cfg.lead_minutes ?? 6;
+    $("#step").value = cfg.step_seconds ?? 30;
+    refresh();
+  }
+  const checked = (id) => [...document.querySelectorAll(`#${id} input:checked`)].map((i) => i.value);
+  const num = (id, d) => { const v = Number($(id).value); return Number.isFinite(v) && v > 0 ? v : d; };
+  const ep = (p) => ({ kelvin: Number($(`#${p}-k`).value), brightness: Number($(`#${p}-b`).value) });
+
+  function readForm() {
+    const c = structuredClone(cfg), R = c.routines;
+    R.sunrise = { ...R.sunrise, enabled: $("#sunrise-on").checked, time: $("#sunrise-time").value || R.sunrise.time,
+      duration_min: num("#sunrise-dur", 5), days: checked("sunrise-days"), lights: checked("sunrise-lights"),
+      from: ep("sunrise-from"), to: ep("sunrise-to"),
+      tl40: { enabled: $("#tl-on").checked, delay_min: Number($("#tl-delay").value) || 0, on_min: num("#tl-dur", 30) } };
+    R.evening = { ...R.evening, enabled: $("#evening-on").checked, time: $("#evening-time").value || R.evening.time,
+      duration_min: num("#evening-dur", 30), days: checked("evening-days"), lights: checked("evening-lights"),
+      from: ep("evening-from"), to: ep("evening-to") };
+    R.bedtime = { ...R.bedtime, enabled: $("#bedtime-on").checked, time: $("#bedtime-time").value || R.bedtime.time,
+      days: checked("bedtime-days"), lights: checked("bedtime-lights"), cut_lyra_power: $("#cut").checked };
+    c.shelly_plugs.lyra.id = $("#id-lyra").value.trim();
+    c.shelly_plugs.tl40.id = $("#id-tl40").value.trim();
+    c.lead_minutes = num("#lead", 6);
+    c.step_seconds = num("#step", 30);
+    return c;
+  }
+
+  function refresh() {
+    for (const p of ["sunrise-from", "sunrise-to", "evening-from", "evening-to"]) {
+      const { kelvin, brightness } = ep(p);
+      $(`#${p}-k-v`).textContent = `${kelvin} K`;
+      $(`#${p}-b-v`).textContent = `${brightness} %`;
+      $(`#${p}-sw`).style.background = lightColor(kelvin, brightness);
+    }
+    for (const n of ["sunrise", "evening", "bedtime"]) $(`#${n}-when`).textContent = $(`#${n}-time`).value;
+    const k = Number($("#now-k").value), b = Number($("#now-b").value);
+    $("#now-k-v").textContent = `${k} K`; $("#now-b-v").textContent = `${b} %`;
+    $("#now-sw").style.background = lightColor(k, b);
+    const c = readForm();
+    const mins = monthlyMinutes(c);
+    $("#budget").textContent = `≈ ${mins} / 2000`;
+    const bar = $("#budget-bar");
+    bar.style.width = `${Math.min(100, mins / 20)}%`;
+    bar.style.background = mins > 1800 ? "var(--bad)" : mins > 1400 ? "var(--accent)" : "var(--ok)";
+    drawStrip(c);
+  }
+
+  // 24h strip: what the lights do across the day
+  function drawStrip(c) {
+    const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    const pct = (m) => `${(m / 1440) * 100}%`;
+    const R = c.routines, parts = [];
+    const span = (a, b, bg) => {
+      a = ((a % 1440) + 1440) % 1440; b = ((b % 1440) + 1440) % 1440;
+      if (b < a) { parts.push([a, 1440, bg]); parts.push([0, b, bg]); } else parts.push([a, b, bg]);
+    };
+    const sOn = R.sunrise.enabled, eOn = R.evening.enabled, bOn = R.bedtime.enabled;
+    const s0 = toMin(R.sunrise.time), s1 = s0 + R.sunrise.duration_min;
+    const e0 = toMin(R.evening.time), e1 = e0 + R.evening.duration_min;
+    const b0 = toMin(R.bedtime.time);
+    const col = (v) => lightColor(v.kelvin, v.brightness);
+    if (sOn) span(s0, Math.max(s1, s0 + 8), `linear-gradient(90deg, ${col(R.sunrise.from)}, ${col(R.sunrise.to)})`);
+    if (sOn) span(s1, s1 + 60, `linear-gradient(90deg, ${col(R.sunrise.to)}, transparent)`);
+    if (eOn) span(e0, Math.max(e1, e0 + 8), `linear-gradient(90deg, ${col(R.evening.from)}, ${col(R.evening.to)})`);
+    if (eOn && bOn && b0 > e1) span(e1, b0, col(R.evening.to));
+    const html = parts.map(([a, b, bg]) => `<div class="seg" style="left:${pct(a)};width:${pct(b - a)};background:${bg}"></div>`);
+    for (let h = 0; h <= 24; h += 3) html.push(`<div class="tick" style="left:${pct(h * 60)}"></div>`);
+    const now = new Date(); html.push(`<div class="now" style="left:${pct(now.getHours() * 60 + now.getMinutes())}" title="now"></div>`);
+    $("#strip").innerHTML = html.join("");
+    $("#hours").innerHTML = [0, 6, 12, 18, 24].map((h) => `<span style="left:${pct(h * 60)}">${String(h).padStart(2, "0")}</span>`).join("");
+    $("#subtitle").textContent = [sOn && `Sunrise ${R.sunrise.time}`, eOn && `evening ${R.evening.time}`, bOn && `off ${R.bedtime.time}`].filter(Boolean).join(" · ") || "All routines are off.";
+  }
+
+  function toast(msg, kind = "") { const t = $("#toast"); t.textContent = msg; t.className = `toast ${kind}`; }
+
+  // ---------- actions
+  async function save() {
+    const btn = $("#save"); btn.disabled = true; toast("Saving…");
+    try {
+      const c = readForm();
+      const latest = await getFile("config.json");
+      await putFile("config.json", JSON.stringify(c, null, 2) + "\n", latest.sha, "Update schedule from control page");
+      const wf = await getFile(WF);
+      const lines = cronLines(c).map((l) => `    - cron: "${l}"`).join("\n");
+      const updated = wf.text.replace(/(# BEGIN GENERATED SCHEDULE[^\n]*\n)[\s\S]*?(\n[ \t]*# END GENERATED SCHEDULE)/, `$1${lines}$2`);
+      if (updated !== wf.text) await putFile(WF, updated, wf.sha, "Update cron schedule from control page");
+      cfg = c;
+      toast("Saved. The new times apply from the next run.", "ok");
+    } catch (err) { toast(err.message, "err"); }
+    finally { btn.disabled = false; }
+  }
+  async function dispatch(action, args = {}) {
+    toast("Sending…");
+    try {
+      await gh(`/actions/workflows/lights.yml/dispatches`, { method: "POST",
+        body: JSON.stringify({ ref: "main", inputs: { action, args: Object.keys(args).length ? JSON.stringify(args) : "" } }) });
+      toast(`Sent: ${action}. The lamps react in about half a minute.`, "ok");
+      setTimeout(loadRuns, 4000);
+    } catch (err) { toast(err.message, "err"); }
+  }
+  async function loadRuns() {
+    try {
+      const r = await gh(`/actions/runs?per_page=5`);
+      $("#runs").innerHTML = r.workflow_runs.map((w) => {
+        const st = w.status === "completed" ? w.conclusion : w.status;
+        const when = new Date(w.created_at).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+        const label = w.event === "schedule" ? "scheduled" : w.display_title || w.event;
+        return `<a href="${w.html_url}" target="_blank" rel="noopener"><span><span class="dot ${st}"></span>${label}</span><span class="num">${when}</span></a>`;
+      }).join("");
+    } catch { /* runs are a nice-to-have */ }
+  }
+
+  async function load() {
+    try {
+      const f = await getFile("config.json");
+      cfg = JSON.parse(f.text); cfgSha = f.sha;
+      $("#setup").hidden = true; $("#app").hidden = false;
+      renderPanels(); loadRuns();
+    } catch (err) {
+      $("#setup").hidden = false; $("#app").hidden = true;
+      toast(""); if (token) $("#setup .note").textContent = `${err.message} Paste a fine-grained token for bedroom-lights with Contents, Actions and Workflows set to Read and write.`;
+    }
+  }
+
+  document.addEventListener("input", (e) => { if (cfg && e.target.closest("main")) refresh(); });
+  $("#connect").addEventListener("click", () => {
+    token = $("#tok").value.trim(); repo = $("#repo").value.trim() || repo;
+    store.set("bl.token", token); store.set("bl.repo", repo); load();
+  });
+  $("#forget").addEventListener("click", () => { store.del("bl.token"); token = null; $("#app").hidden = true; $("#setup").hidden = false; });
+  $("#save").addEventListener("click", save);
+  document.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
+    const a = b.dataset.act, lights = checked("now-lights");
+    if (a === "apply") dispatch("set", { lights, kelvin: Number($("#now-k").value), brightness: Number($("#now-b").value) });
+    else if (a === "off") dispatch("set", { lights, power: "off" });
+    else if (a === "tl40") dispatch("plug", { plug: "tl40", on: true, minutes: 30 });
+    else dispatch(a);
+  }));
+
+  // Example strip before connecting, so the page never opens empty
+  const example = { lead_minutes: 6, govee_lights: {}, routines: {
+    sunrise: { enabled: true, time: "06:55", duration_min: 5, days: DAYS, from: { kelvin: 2000, brightness: 1 }, to: { kelvin: 9000, brightness: 100 } },
+    evening: { enabled: true, time: "21:30", duration_min: 20, days: DAYS, from: { kelvin: 6500, brightness: 80 }, to: { kelvin: 2000, brightness: 15 } },
+    bedtime: { enabled: true, time: "23:30", days: DAYS } } };
+  drawStrip(example);
+  $("#subtitle").textContent = "Example schedule. Connect to load yours.";
+  if (token) { $("#tok").value = token; $("#repo").value = repo; load(); } else { $("#setup").hidden = false; }
+})();
+</script>
+</body>
+</html>
