@@ -172,7 +172,7 @@ button:disabled { opacity: .5; cursor: progress; }
         <button data-act="bedtime">Run bedtime</button>
         <button data-act="tl40">TL40 30 min</button>
       </div>
-      <p class="note">Commands go through GitHub and take about half a minute to reach the lamps.</p>
+      <p class="note" id="mode-note">Commands go through GitHub and take about half a minute. Set up instant control in Devices to reach the lamps directly.</p>
       <div class="runs" id="runs"></div>
     </section>
 
@@ -186,7 +186,17 @@ button:disabled { opacity: .5; cursor: progress; }
         <div class="field"><label for="lead">Start runs early (min)</label><input id="lead" type="number" min="2" max="20"></div>
         <div class="field"><label for="step">Ramp step (s)</label><input id="step" type="number" min="15" max="300"></div>
       </div>
-      <button id="forget">Forget token on this device</button>
+      <details id="direct">
+        <summary>Instant control from this phone</summary>
+        <div class="field" style="gap:12px">
+          <p class="note">With these keys, Apply, Turn off and TL40 go straight to Govee and Shelly in about a second. They are saved only in this phone's browser, never in the repo.</p>
+          <div class="field"><label for="k-govee">Govee API key</label><input id="k-govee" type="password" autocomplete="off"></div>
+          <div class="field"><label for="k-shelly">Shelly cloud key</label><input id="k-shelly" type="password" autocomplete="off"></div>
+          <div class="field"><label for="k-host">Shelly server</label><input id="k-host" type="text" autocomplete="off" placeholder="shelly-77-eu.shelly.cloud"></div>
+          <button id="save-keys">Save keys on this phone</button>
+        </div>
+      </details>
+      <button id="forget">Forget token and keys on this device</button>
     </section>
 
     <div class="savebar">
@@ -428,6 +438,81 @@ button:disabled { opacity: .5; cursor: progress; }
       setTimeout(loadRuns, 4000);
     } catch (err) { toast(err.message, "err"); }
   }
+  // ---------- instant control: straight to Govee / Shelly from the browser
+  const keys = () => ({ govee: store.get("bl.govee"), shelly: store.get("bl.shelly"), host: store.get("bl.host") });
+  const hasDirect = () => { const k = keys(); return !!(k.govee && k.shelly && k.host); };
+  let directBlocked = false;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function goveeCmd(lt, type, instance, value) {
+    const res = await fetch("https://openapi.api.govee.com/router/api/v1/device/control", {
+      method: "POST", headers: { "Govee-API-Key": keys().govee, "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId: String(Date.now()), payload: { sku: lt.sku, device: lt.device, capability: { type, instance, value } } }) });
+    const j = await res.json().catch(() => ({}));
+    if (j.code !== 200) throw new Error(`${lt.name}: ${j.msg || res.status}`);
+  }
+  async function shellyCmd(plugKey, on, toggleAfter) {
+    const plug = cfg.shelly_plugs[plugKey];
+    if (!plug?.id) throw new Error(`Add the Shelly ID for ${plug?.name || plugKey} in Devices.`);
+    const k = keys(), body = { id: plug.id, channel: 0, on };
+    if (toggleAfter) body.toggle_after = toggleAfter;
+    const res = await fetch(`https://${k.host.replace(/^https?:\/\//, "").replace(/\/$/, "")}/v2/devices/api/set/switch?auth_key=${encodeURIComponent(k.shelly)}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`${plug.name}: Shelly ${res.status}`);
+    await sleep(1100); // Shelly cloud allows one request per second
+  }
+  async function setLight(key, kelvin, brightness) {
+    const lt = cfg.govee_lights[key];
+    const k = Math.max(lt.min_kelvin || 2000, Math.min(lt.max_kelvin || 9000, kelvin));
+    const run = async () => {
+      await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", k);
+      await goveeCmd(lt, "devices.capabilities.range", "brightness", brightness);
+      await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 1);
+    };
+    try { await run(); }
+    catch (err) {
+      if (!(lt.power_plug && /offline/i.test(err.message))) throw err;
+      toast(`${lt.name} was unpowered: switching it on, it needs about 20 seconds…`);
+      await shellyCmd(lt.power_plug, true);
+      for (let i = 0; i < 12; i++) {
+        await sleep(5000);
+        try { await run(); return; } catch (e) { if (!/offline/i.test(e.message)) throw e; }
+      }
+      throw new Error(`${lt.name} is still offline. Check the hotspot.`);
+    }
+  }
+  async function direct(action, args) {
+    if (action === "set" && args.power === "off") {
+      for (const key of args.lights) {
+        const lt = cfg.govee_lights[key];
+        if (lt.power_plug) await shellyCmd(lt.power_plug, false);
+        else await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 0);
+      }
+    } else if (action === "set") {
+      await Promise.all(args.lights.map((key) => setLight(key, args.kelvin, args.brightness)));
+    } else if (action === "plug") {
+      await shellyCmd(args.plug, args.on, args.minutes ? args.minutes * 60 : undefined);
+    }
+  }
+  async function command(action, args) {
+    if (!hasDirect() || directBlocked) return dispatch(action, args);
+    toast("Sending…");
+    try { await direct(action, args); toast("Done.", "ok"); }
+    catch (err) {
+      if (err instanceof TypeError) { // the browser refused the request (CORS or network)
+        directBlocked = true;
+        toast("This browser can't reach the lamps directly; sending through GitHub instead.");
+        await sleep(1500);
+        return dispatch(action, args);
+      }
+      toast(err.message, "err");
+    }
+  }
+  function syncModeNote() {
+    $("#mode-note").textContent = hasDirect() && !directBlocked
+      ? "Apply, Turn off and TL40 go straight to the lamps. Routines run through GitHub and start in about half a minute."
+      : "Commands go through GitHub and take about half a minute. Set up instant control in Devices to reach the lamps directly.";
+  }
+
   async function loadRuns() {
     try {
       const r = await gh(`/actions/runs?per_page=5`);
@@ -445,7 +530,7 @@ button:disabled { opacity: .5; cursor: progress; }
       const f = await getFile("config.json");
       cfg = JSON.parse(f.text); cfgSha = f.sha;
       $("#setup").hidden = true; $("#app").hidden = false;
-      renderPanels(); loadRuns();
+      renderPanels(); loadRuns(); syncModeNote();
     } catch (err) {
       $("#setup").hidden = false; $("#app").hidden = true;
       toast(""); if (token) $("#setup .note").textContent = `${err.message} Paste a fine-grained token for bedroom-lights with Contents, Actions and Workflows set to Read and write.`;
@@ -457,13 +542,19 @@ button:disabled { opacity: .5; cursor: progress; }
     token = $("#tok").value.trim(); repo = $("#repo").value.trim() || repo;
     store.set("bl.token", token); store.set("bl.repo", repo); load();
   });
-  $("#forget").addEventListener("click", () => { store.del("bl.token"); token = null; $("#app").hidden = true; $("#setup").hidden = false; });
+  $("#save-keys").addEventListener("click", () => {
+    store.set("bl.govee", $("#k-govee").value.trim()); store.set("bl.shelly", $("#k-shelly").value.trim());
+    store.set("bl.host", $("#k-host").value.trim()); directBlocked = false; syncModeNote();
+    toast(hasDirect() ? "Keys saved on this phone. Try Apply." : "Fill in all three fields.", hasDirect() ? "ok" : "err");
+  });
+  $("#k-govee").value = keys().govee || ""; $("#k-shelly").value = keys().shelly || ""; $("#k-host").value = keys().host || "";
+  $("#forget").addEventListener("click", () => { ["bl.token", "bl.govee", "bl.shelly", "bl.host"].forEach((k) => store.del(k)); token = null; $("#app").hidden = true; $("#setup").hidden = false; });
   $("#save").addEventListener("click", save);
   document.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
     const a = b.dataset.act, lights = checked("now-lights");
-    if (a === "apply") dispatch("set", { lights, kelvin: Number($("#now-k").value), brightness: Number($("#now-b").value) });
-    else if (a === "off") dispatch("set", { lights, power: "off" });
-    else if (a === "tl40") dispatch("plug", { plug: "tl40", on: true, minutes: 30 });
+    if (a === "apply") command("set", { lights, kelvin: Number($("#now-k").value), brightness: Number($("#now-b").value) });
+    else if (a === "off") command("set", { lights, power: "off" });
+    else if (a === "tl40") command("plug", { plug: "tl40", on: true, minutes: 30 });
     else dispatch(a);
   }));
 
