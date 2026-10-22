@@ -129,7 +129,7 @@ button:disabled { opacity: .5; cursor: progress; }
   <header>
     <span class="eyebrow">Bedroom · circadian schedule</span>
     <h1>Bedroom Lights</h1>
-    <p id="subtitle">Sunrise, evening and bedtime for the Lyra, the bulb and the TL40.</p>
+    <p id="subtitle">Sunrise and evening warmth for the Lyra, the bulb and the TL40.</p>
   </header>
 
   <div class="day" aria-label="Light across the day">
@@ -147,8 +147,7 @@ button:disabled { opacity: .5; cursor: progress; }
 
   <div id="app" hidden>
     <section class="panel" id="p-sunrise"></section>
-    <section class="panel" id="p-evening"></section>
-    <section class="panel" id="p-bedtime"></section>
+    <section class="panel" id="p-warm"></section>
 
     <section class="panel">
       <h2>Right now</h2>
@@ -168,8 +167,7 @@ button:disabled { opacity: .5; cursor: progress; }
       </div>
       <div class="row">
         <button data-act="sunrise">Run sunrise</button>
-        <button data-act="evening">Run evening</button>
-        <button data-act="bedtime">Run bedtime</button>
+        <button data-act="warm">Make it warm</button>
         <button data-act="tl40">TL40 30 min</button>
       </div>
       <p class="note" id="mode-note">Commands go through GitHub and take about half a minute. Set up instant control in Devices to reach the lamps directly.</p>
@@ -310,7 +308,7 @@ button:disabled { opacity: .5; cursor: progress; }
       <label class="switch"><input type="checkbox" id="${name}-on" ${r.enabled ? "checked" : ""}> On</label></div>`;
   }
   function renderPanels() {
-    const s = cfg.routines.sunrise, e = cfg.routines.evening, b = cfg.routines.bedtime;
+    const s = cfg.routines.sunrise, w = cfg.routines.warm;
     $("#p-sunrise").innerHTML = head("sunrise", "Morning · warm to cool", s) + `
       <div class="grid2"><div class="field"><label for="sunrise-time">Start</label><input type="time" id="sunrise-time" value="${s.time}"></div>
       <div class="field"><label for="sunrise-dur">Ramp (min)</label><input type="number" id="sunrise-dur" min="1" max="60" value="${s.duration_min}"></div></div>
@@ -323,18 +321,15 @@ button:disabled { opacity: .5; cursor: progress; }
           <div class="grid2"><div class="field"><label for="tl-delay">Minutes after start</label><input type="number" id="tl-delay" min="0" max="60" value="${s.tl40?.delay_min ?? 1}"></div>
           <div class="field"><label for="tl-dur">Stays on (min)</label><input type="number" id="tl-dur" min="5" max="120" value="${s.tl40?.on_min ?? 30}"></div></div>
         </div></details>`;
-    $("#p-evening").innerHTML = head("evening", "Evening · cool to warm", e) + `
-      <div class="grid2"><div class="field"><label for="evening-time">Start</label><input type="time" id="evening-time" value="${e.time}"></div>
-      <div class="field"><label for="evening-dur">Fade (min)</label><input type="number" id="evening-dur" min="1" max="120" value="${e.duration_min}"></div></div>
-      ${chipDays("evening-days", e.days)}
-      <div class="grid2">${endpoint("evening-from", "From", e.from)}${endpoint("evening-to", "To", e.to)}</div>
-      ${chipLights("evening-lights", e.lights)}`;
-    $("#p-bedtime").innerHTML = head("bedtime", "Night · everything off", b) + `
-      <div class="field"><label for="bedtime-time">Lights off at</label><input type="time" id="bedtime-time" value="${b.time}"></div>
-      ${chipDays("bedtime-days", b.days)}
-      ${chipLights("bedtime-lights", b.lights)}
-      <label class="switch"><input type="checkbox" id="cut" ${b.cut_lyra_power !== false ? "checked" : ""}> Cut the Lyra's power (hides the blue segment)</label>
-      <p class="note">Each light is left at its warmest, dimmest setting first, so it wakes up gently.</p>`;
+    $("#p-warm").innerHTML = head("warm", "Evening · warm colour", w) + `
+      <div class="field"><label for="warm-time">From</label><input type="time" id="warm-time" value="${w.time}"></div>
+      ${chipDays("warm-days", w.days)}
+      <div class="endpoint"><span class="label">Colour</span>
+        <div class="swatch" id="warm-sw"></div>
+        <div class="rangeval"><span>K</span><b id="warm-k-v"></b></div>
+        <input type="range" id="warm-k" min="2000" max="4000" step="100" value="${w.kelvin}" aria-label="Evening colour temperature"></div>
+      ${chipLights("warm-lights", w.lights)}
+      <p class="note">Lights that are on at this time turn warm and keep their brightness. Lights that are off stay off.</p>`;
     $("#now-lights").innerHTML = Object.entries(cfg.govee_lights).map(([k, l]) =>
       `<label class="chip"><input type="checkbox" value="${k}" checked><span>${l.name}</span></label>`).join("");
     $("#id-lyra").value = cfg.shelly_plugs?.lyra?.id || "";
@@ -353,11 +348,8 @@ button:disabled { opacity: .5; cursor: progress; }
       duration_min: num("#sunrise-dur", 5), days: checked("sunrise-days"), lights: checked("sunrise-lights"),
       from: ep("sunrise-from"), to: ep("sunrise-to"),
       tl40: { enabled: $("#tl-on").checked, delay_min: Number($("#tl-delay").value) || 0, on_min: num("#tl-dur", 30) } };
-    R.evening = { ...R.evening, enabled: $("#evening-on").checked, time: $("#evening-time").value || R.evening.time,
-      duration_min: num("#evening-dur", 30), days: checked("evening-days"), lights: checked("evening-lights"),
-      from: ep("evening-from"), to: ep("evening-to") };
-    R.bedtime = { ...R.bedtime, enabled: $("#bedtime-on").checked, time: $("#bedtime-time").value || R.bedtime.time,
-      days: checked("bedtime-days"), lights: checked("bedtime-lights"), cut_lyra_power: $("#cut").checked };
+    R.warm = { ...R.warm, enabled: $("#warm-on").checked, time: $("#warm-time").value || R.warm.time,
+      days: checked("warm-days"), lights: checked("warm-lights"), kelvin: Number($("#warm-k").value) };
     c.shelly_plugs.lyra.id = $("#id-lyra").value.trim();
     c.shelly_plugs.tl40.id = $("#id-tl40").value.trim();
     c.lead_minutes = num("#lead", 6);
@@ -366,13 +358,15 @@ button:disabled { opacity: .5; cursor: progress; }
   }
 
   function refresh() {
-    for (const p of ["sunrise-from", "sunrise-to", "evening-from", "evening-to"]) {
+    for (const p of ["sunrise-from", "sunrise-to"]) {
       const { kelvin, brightness } = ep(p);
       $(`#${p}-k-v`).textContent = `${kelvin} K`;
       $(`#${p}-b-v`).textContent = `${brightness} %`;
       $(`#${p}-sw`).style.background = lightColor(kelvin, brightness);
     }
-    for (const n of ["sunrise", "evening", "bedtime"]) $(`#${n}-when`).textContent = $(`#${n}-time`).value;
+    for (const n of ["sunrise", "warm"]) $(`#${n}-when`).textContent = $(`#${n}-time`).value;
+    const wk = Number($("#warm-k").value);
+    $("#warm-k-v").textContent = `${wk} K`; $("#warm-sw").style.background = lightColor(wk, 60);
     const k = Number($("#now-k").value), b = Number($("#now-b").value);
     $("#now-k-v").textContent = `${k} K`; $("#now-b-v").textContent = `${b} %`;
     $("#now-sw").style.background = lightColor(k, b);
@@ -394,21 +388,18 @@ button:disabled { opacity: .5; cursor: progress; }
       a = ((a % 1440) + 1440) % 1440; b = ((b % 1440) + 1440) % 1440;
       if (b < a) { parts.push([a, 1440, bg]); parts.push([0, b, bg]); } else parts.push([a, b, bg]);
     };
-    const sOn = R.sunrise.enabled, eOn = R.evening.enabled, bOn = R.bedtime.enabled;
+    const sOn = R.sunrise.enabled, wOn = R.warm?.enabled;
     const s0 = toMin(R.sunrise.time), s1 = s0 + R.sunrise.duration_min;
-    const e0 = toMin(R.evening.time), e1 = e0 + R.evening.duration_min;
-    const b0 = toMin(R.bedtime.time);
     const col = (v) => lightColor(v.kelvin, v.brightness);
     if (sOn) span(s0, Math.max(s1, s0 + 8), `linear-gradient(90deg, ${col(R.sunrise.from)}, ${col(R.sunrise.to)})`);
     if (sOn) span(s1, s1 + 60, `linear-gradient(90deg, ${col(R.sunrise.to)}, transparent)`);
-    if (eOn) span(e0, Math.max(e1, e0 + 8), `linear-gradient(90deg, ${col(R.evening.from)}, ${col(R.evening.to)})`);
-    if (eOn && bOn && b0 > e1) span(e1, b0, col(R.evening.to));
+    if (wOn) { const w0 = toMin(R.warm.time); span(w0, 1440, `linear-gradient(90deg, ${lightColor(R.warm.kelvin, 70)}, ${lightColor(R.warm.kelvin, 25)})`); }
     const html = parts.map(([a, b, bg]) => `<div class="seg" style="left:${pct(a)};width:${pct(b - a)};background:${bg}"></div>`);
     for (let h = 0; h <= 24; h += 3) html.push(`<div class="tick" style="left:${pct(h * 60)}"></div>`);
     const now = new Date(); html.push(`<div class="now" style="left:${pct(now.getHours() * 60 + now.getMinutes())}" title="now"></div>`);
     $("#strip").innerHTML = html.join("");
     $("#hours").innerHTML = [0, 6, 12, 18, 24].map((h) => `<span style="left:${pct(h * 60)}">${String(h).padStart(2, "0")}</span>`).join("");
-    $("#subtitle").textContent = [sOn && `Sunrise ${R.sunrise.time}`, eOn && `evening ${R.evening.time}`, bOn && `off ${R.bedtime.time}`].filter(Boolean).join(" · ") || "All routines are off.";
+    $("#subtitle").textContent = [sOn && `Sunrise ${R.sunrise.time}`, wOn && `warm from ${R.warm.time}`].filter(Boolean).join(" · ") || "All routines are off.";
   }
 
   function toast(msg, kind = "") { const t = $("#toast"); t.textContent = msg; t.className = `toast ${kind}`; }
@@ -561,8 +552,7 @@ button:disabled { opacity: .5; cursor: progress; }
   // Example strip before connecting, so the page never opens empty
   const example = { lead_minutes: 6, govee_lights: {}, routines: {
     sunrise: { enabled: true, time: "06:55", duration_min: 5, days: DAYS, from: { kelvin: 2000, brightness: 1 }, to: { kelvin: 9000, brightness: 100 } },
-    evening: { enabled: true, time: "21:30", duration_min: 20, days: DAYS, from: { kelvin: 6500, brightness: 80 }, to: { kelvin: 2000, brightness: 15 } },
-    bedtime: { enabled: true, time: "23:30", days: DAYS } } };
+    warm: { enabled: true, time: "18:00", days: DAYS, kelvin: 2700 } } };
   drawStrip(example);
   $("#subtitle").textContent = "Example schedule. Connect to load yours.";
   if (token) { $("#tok").value = token; $("#repo").value = repo; load(); } else { $("#setup").hidden = false; }
