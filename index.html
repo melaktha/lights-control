@@ -155,7 +155,7 @@ button:disabled { opacity: .5; cursor: progress; }
 
   <section class="panel" id="setup" hidden>
     <h2>Connect to GitHub</h2>
-    <p class="note" id="setup-note">Paste a fine-grained token for bedroom-lights with Contents, Actions and Workflows set to Read and write. It stays in this browser.</p>
+    <p class="note" id="setup-note">Paste a fine-grained token for bedroom-lights with Contents and Actions set to Read and write. It stays in this browser.</p>
     <div class="field"><label for="tok">Token</label><input id="tok" type="password" autocomplete="off" placeholder="github_pat_…"></div>
     <div class="field"><label for="repo">Repository</label><input id="repo" type="text" value="melaktha/bedroom-lights"></div>
     <button class="primary" id="connect">Connect</button>
@@ -205,7 +205,7 @@ button:disabled { opacity: .5; cursor: progress; }
           <div class="field"><label for="id-tl40">TL40 plug ID</label><input id="id-tl40" type="text" autocomplete="off" placeholder="b48a0a1cd978"></div>
         </div>
         <div class="grid2">
-          <div class="field"><label for="lead">Start runs early (min)</label><input id="lead" type="number" inputmode="numeric" min="2" max="20"></div>
+          <div class="field"><label for="lead">Prepare lights early (min)</label><input id="lead" type="number" inputmode="numeric" min="2" max="15"></div>
           <div class="field"><label for="step">Sunrise step (s)</label><input id="step" type="number" inputmode="numeric" min="15" max="300"></div>
         </div>
         <button id="save-devices">Save devices</button>
@@ -232,7 +232,6 @@ button:disabled { opacity: .5; cursor: progress; }
 (() => {
   const DAYS = ["mon","tue","wed","thu","fri","sat","sun"];
   const DAY_LABEL = {mon:"Mo",tue:"Tu",wed:"We",thu:"Th",fri:"Fr",sat:"Sa",sun:"Su"};
-  const WF = ".github/workflows/lights.yml";
   const $ = (s) => document.querySelector(s);
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -291,29 +290,15 @@ button:disabled { opacity: .5; cursor: progress; }
     return gh(`/contents/${path}`, { method: "PUT", body: JSON.stringify({ message, content: b64enc(text), sha }) });
   }
 
-  // ---------- schedule maths (mirrors lights.py)
-  function cronLines(c) {
-    const lead = Number(c.lead_minutes || 6), set = new Set();
-    for (const r of Object.values(c.routines)) {
-      if (!r.enabled) continue;
-      const [hh, mm] = r.time.split(":").map(Number);
-      for (const off of [1, 2]) {
-        const t = (((hh * 60 + mm - lead - off * 60) % 1440) + 1440) % 1440;
-        set.add(`${t % 60} ${Math.floor(t / 60)} * * *`);
-      }
-    }
-    if (!set.size) return ["0 0 1 1 *"];
-    return [...set].sort((a, b) => { const [am, ah] = a.split(" ").map(Number), [bm, bh] = b.split(" ").map(Number); return ah - bh || am - bm; });
-  }
+  // ---------- Actions minutes estimate (mirrors lights.py)
   function monthlyMinutes(c) {
-    const lead = Number(c.lead_minutes || 6); let perWeek = 0;
+    const lead = Number(c.lead_minutes || 3); let perWeek = 0;
     for (const [name, r] of Object.entries(c.routines)) {
       if (!r.enabled) continue;
       const days = (r.days || DAYS).length;
-      const run = lead + (name === "sunrise" ? (r.duration_min || 0) + 2 : 2);
-      perWeek += days * (run + 1) + (7 - days) * 2; // +1 / 2 = the run in the other daylight-saving slot
+      perWeek += days * (lead + 1 + (name === "sunrise" ? (r.duration_min || 0) + 1 : 0));
     }
-    return Math.round(perWeek * 30.4 / 7);
+    return Math.round((perWeek * 30.4) / 7) + 30; // + a little for syncs and manual commands
   }
 
   // ---------- rendering
@@ -358,7 +343,7 @@ button:disabled { opacity: .5; cursor: progress; }
       `<label class="chip"><input type="checkbox" value="${k}" checked><span>${l.name}</span></label>`).join("");
     $("#id-lyra").value = cfg.shelly_plugs?.lyra?.id || "";
     $("#id-tl40").value = cfg.shelly_plugs?.tl40?.id || "";
-    $("#lead").value = cfg.lead_minutes ?? 6;
+    $("#lead").value = cfg.lead_minutes ?? 3;
     $("#step").value = cfg.step_seconds ?? 30;
     refresh();
   }
@@ -377,7 +362,7 @@ button:disabled { opacity: .5; cursor: progress; }
       days: checked("warm-days"), lights: checked("warm-lights"), kelvin: Number($("#warm-k").value) };
     c.shelly_plugs.lyra.id = $("#id-lyra").value.trim();
     c.shelly_plugs.tl40.id = $("#id-tl40").value.trim();
-    c.lead_minutes = num("#lead", 6);
+    c.lead_minutes = num("#lead", 3);
     c.step_seconds = num("#step", 30);
     return c;
   }
@@ -441,12 +426,9 @@ button:disabled { opacity: .5; cursor: progress; }
       const c = readForm();
       const latest = await getFile("config.json");
       await putFile("config.json", JSON.stringify(c, null, 2) + "\n", latest.sha, `Update ${what} from control page`);
-      const wf = await getFile(WF);
-      const lines = cronLines(c).map((l) => `    - cron: "${l}"`).join("\n");
-      const updated = wf.text.replace(/(# BEGIN GENERATED SCHEDULE[^\n]*\n)[\s\S]*?(\n[ \t]*# END GENERATED SCHEDULE)/, `$1${lines}$2`);
-      if (updated !== wf.text) await putFile(WF, updated, wf.sha, "Update cron schedule from control page");
       cfg = c;
-      toast("Saved. Changes apply from the next run.", "ok");
+      toast("Saved. The timer updates in about a minute.", "ok");
+      setTimeout(loadRuns, 5000);
     } catch (err) { toast(err.message, "err"); }
     finally { btn.disabled = false; }
   }
@@ -498,8 +480,14 @@ button:disabled { opacity: .5; cursor: progress; }
     if (args.power === "off") {
       for (const key of args.lights) {
         const lt = cfg.govee_lights[key];
-        if (lt.power_plug) await shellyCmd(lt.power_plug, false);
-        else await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 0);
+        if (lt.power_plug) {
+          // leave it warm and dim first, so it fades in gently when power returns
+          try {
+            await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
+            await goveeCmd(lt, "devices.capabilities.range", "brightness", 1);
+          } catch { /* already offline: just cut the power */ }
+          await shellyCmd(lt.power_plug, false);
+        } else await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 0);
       }
     } else {
       await Promise.all(args.lights.map((key) => setLight(key, args.kelvin, args.brightness)));
@@ -536,7 +524,7 @@ button:disabled { opacity: .5; cursor: progress; }
       $("#runs").innerHTML = r.workflow_runs.map((w) => {
         const st = w.status === "completed" ? w.conclusion : w.status;
         const when = new Date(w.created_at).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
-        const label = w.event === "schedule" ? "Scheduled" : w.event === "workflow_dispatch" ? "From this page" : w.event;
+        const label = w.event === "push" ? "Timer update" : w.event === "workflow_dispatch" ? "Lights run" : w.event;
         return `<a href="${w.html_url}" target="_blank" rel="noopener"><span><span class="dot ${st}"></span>${label}</span><span class="num">${when}</span></a>`;
       }).join("");
     } catch { /* runs are a nice-to-have */ }
@@ -561,7 +549,7 @@ button:disabled { opacity: .5; cursor: progress; }
       showTab(store.get("bl.tab") || "schedule");
     } catch (err) {
       $("#setup").hidden = false; $("#app").hidden = true;
-      if (token) $("#setup-note").textContent = `${err.message} Paste a fine-grained token for bedroom-lights with Contents, Actions and Workflows set to Read and write.`;
+      if (token) $("#setup-note").textContent = `${err.message} Paste a fine-grained token for bedroom-lights with Contents and Actions set to Read and write.`;
     }
   }
 
