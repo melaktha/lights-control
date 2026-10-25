@@ -725,7 +725,7 @@ details.part.off { opacity: .55; }
     const isC = commuteDay(g, t), isSkip = skipped(g, t), isWet = g.wet_days.includes(t);
     const manualToday = g.rides.filter((r) => r.date === t).reduce((a, r) => a + r.km, 0);
     $("#bike-today").innerHTML = `<div class="titles"><span class="eyebrow">Today</span><h2>${isC ? (isSkip ? "No commute today" : `Commute · ${fmtKm(g.commute.km)} km`) : "No commute today"}</h2></div>
-      <p class="note state">${isC ? (isSkip ? "Today isn't counted." : `Counted automatically${isWet ? ", marked as wet" : ""}.`) : "Not a commute day."}${manualToday ? ` Plus ${fmtKm(manualToday)} km added by hand.` : ""}</p>
+      <p class="note state">${isC ? (isSkip ? "Today isn't counted." : `Counted automatically${isWet ? ", marked as wet" : ""}.`) : g.commute?.enabled ? "Not a commute day." : "Automatic commute counting is off: add the rides you do with Add ride."}${manualToday ? ` Plus ${fmtKm(manualToday)} km added by hand.` : ""}</p>
       ${isC ? `<div class="row three"><button data-skip="${t}" class="${isSkip ? "on" : ""}">Didn't ride</button>
         <button data-wet="${t}" class="${isWet ? "on" : ""}" ${isSkip ? "disabled" : ""}>Rain</button><button class="primary" id="open-ride">Add ride</button></div>`
         : `<button class="primary" id="open-ride">Add ride</button>`}`;
