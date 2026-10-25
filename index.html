@@ -4,16 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Lights">
+<meta name="apple-mobile-web-app-title" content="Home">
 <meta name="theme-color" content="#16130f">
-<title>Bedroom Lights</title>
+<title>Home</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2316130f'/%3E%3Ccircle cx='32' cy='38' r='14' fill='%23ffb35c'/%3E%3Crect x='8' y='38' width='48' height='18' fill='%2316130f'/%3E%3Crect x='12' y='40' width='40' height='3' rx='1.5' fill='%2384a9ff'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2316130f'/%3E%3Ccircle cx='32' cy='38' r='14' fill='%23ffb35c'/%3E%3Crect x='8' y='38' width='48' height='18' fill='%2316130f'/%3E%3Crect x='12' y='40' width='40' height='3' rx='1.5' fill='%2384a9ff'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one phone column. Header + 24h light strip, then three tabs (Schedule / Right now / Devices). Dark-first for a bedroom at night. */
+/* Layout: one phone column. Header, then top-level sections (Lights / Bike / Settings); Lights has its own Schedule / Right now tabs. Dark-first for a bedroom at night. */
 :root {
   --bg: #16130f;
   --surface: #211d18;
@@ -24,6 +24,7 @@
   --on-accent: #1b1610;
   --ok: #7fd18b;
   --bad: #ff7a6b;
+  --warn: #f2c14e;
   --strip: #0b0a08;
   --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --body: "Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
@@ -33,13 +34,13 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --bg: #f6f2ec; --surface: #fffdf9; --line: #e2d9cc; --fg: #221c15; --muted: #6f6355;
-    --accent: #c4670a; --on-accent: #fffaf3; --ok: #2f8a3e; --bad: #c43d2c; --strip: #1c1915;
+    --accent: #c4670a; --on-accent: #fffaf3; --ok: #2f8a3e; --bad: #c43d2c; --warn: #a87500; --strip: #1c1915;
     color-scheme: light;
   }
 }
 :root[data-theme="light"] {
   --bg: #f6f2ec; --surface: #fffdf9; --line: #e2d9cc; --fg: #221c15; --muted: #6f6355;
-  --accent: #c4670a; --on-accent: #fffaf3; --ok: #2f8a3e; --bad: #c43d2c; --strip: #1c1915;
+  --accent: #c4670a; --on-accent: #fffaf3; --ok: #2f8a3e; --bad: #c43d2c; --warn: #a87500; --strip: #1c1915;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -136,22 +137,55 @@ button:disabled { opacity: .5; cursor: progress; }
 .runs a { color: var(--fg); text-decoration: none; display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
 .dot.success { background: var(--ok); } .dot.failure { background: var(--bad); } .dot.in_progress, .dot.queued { background: var(--accent); }
+/* sections */
+.tabs.sub { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tabs button { position: relative; }
+.badge { position: absolute; top: 7px; right: 10px; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--surface); }
+.tabs button[aria-selected="true"] .badge { box-shadow: 0 0 0 2px var(--fg); }
+
+/* bike */
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpi b { font: 500 1.35rem/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 0.78rem; color: var(--muted); }
+.specs { font-size: 0.82rem; color: var(--muted); margin: 0; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-size: 0.8rem; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.due { color: var(--bad); border-color: var(--bad); }
+.pill.soon { color: var(--warn); border-color: var(--warn); }
+.pill.ok { color: var(--ok); border-color: var(--ok); }
+.today { display: flex; flex-direction: column; gap: 10px; }
+.today .state { font-size: 0.95rem; }
+.row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+button.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.parts { display: flex; flex-direction: column; gap: 8px; }
+details.part { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); padding: 0; border-top-width: 1px; }
+details.part > summary { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px; color: var(--fg); font-size: 0.95rem; }
+details.part > summary::-webkit-details-marker { display: none; }
+details.part[open] > summary { margin-bottom: 0; }
+.pname { min-width: 0; }
+.pstat { font: 500 0.82rem var(--mono); color: var(--muted); white-space: nowrap; }
+.pbar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.pbar i { display: block; height: 100%; background: var(--ok); }
+details.part.soon .pbar i { background: var(--warn); } details.part.soon .pstat { color: var(--warn); }
+details.part.due .pbar i { background: var(--bad); } details.part.due .pstat { color: var(--bad); }
+details.part.off { opacity: .55; }
+.pbody { display: flex; flex-direction: column; gap: 12px; padding: 0 12px 12px; }
+.list { display: flex; flex-direction: column; gap: 6px; }
+.item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); font-size: 0.88rem; }
+.item .acts { display: flex; gap: 6px; }
+.item .acts button { padding: 6px 10px; font-size: 0.8rem; border-radius: 8px; }
+.item small { color: var(--muted); }
+.seg2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <span class="eyebrow">Bedroom · circadian schedule</span>
-    <h1>Bedroom Lights</h1>
-    <p id="subtitle">Sunrise, light therapy and evening warmth.</p>
+    <span class="eyebrow" id="today-label">Home</span>
+    <h1>Home</h1>
   </header>
-
-  <div class="day" aria-label="Light across the day">
-    <div class="strip" id="strip"></div>
-    <div class="hours" id="hours"></div>
-    <div class="legend"><span><i style="background:linear-gradient(90deg,#3a1f05,#cfe0ff)"></i>Sunrise</span><span><i style="background:#e9f0ff"></i>TL40</span><span><i style="background:#c9772f"></i>Warm</span></div>
-  </div>
 
   <section class="panel" id="setup" hidden>
     <h2>Connect to GitHub</h2>
@@ -162,42 +196,113 @@ button:disabled { opacity: .5; cursor: progress; }
   </section>
 
   <div id="app" class="tab" hidden>
-    <div class="tabs" role="tablist">
-      <button role="tab" id="t-schedule" aria-selected="true" aria-controls="tab-schedule">Schedule</button>
-      <button role="tab" id="t-now" aria-selected="false" aria-controls="tab-now">Right now</button>
-      <button role="tab" id="t-devices" aria-selected="false" aria-controls="tab-devices">Devices</button>
+    <div class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" id="t-lights" aria-selected="true">Lights</button>
+      <button role="tab" id="t-bike" aria-selected="false">Bike<i class="badge" hidden title="Maintenance due"></i></button>
+      <button role="tab" id="t-settings" aria-selected="false">Settings</button>
     </div>
 
-    <div class="tab" id="tab-schedule" role="tabpanel">
-      <section class="panel" id="p-sunrise"></section>
-      <section class="panel" id="p-tl40"></section>
-      <section class="panel" id="p-warm"></section>
+    <div class="tab" id="sec-lights" role="tabpanel">
+      <p class="note" id="subtitle">Sunrise, light therapy and evening warmth.</p>
+      <div class="day" aria-label="Light across the day">
+        <div class="strip" id="strip"></div>
+        <div class="hours" id="hours"></div>
+        <div class="legend"><span><i style="background:linear-gradient(90deg,#3a1f05,#cfe0ff)"></i>Sunrise</span><span><i style="background:#e9f0ff"></i>TL40</span><span><i style="background:#c9772f"></i>Warm</span></div>
+      </div>
+      <div class="tabs sub" role="tablist" aria-label="Lights">
+        <button role="tab" id="t-schedule" aria-selected="true">Schedule</button>
+        <button role="tab" id="t-now" aria-selected="false">Right now</button>
+      </div>
+
+      <div class="tab" id="tab-schedule" role="tabpanel">
+        <section class="panel" id="p-sunrise"></section>
+        <section class="panel" id="p-tl40"></section>
+        <section class="panel" id="p-warm"></section>
+        <section class="panel">
+          <div class="budget"><span>Actions min / month</span><span class="bar"><i id="budget-bar"></i></span><span class="num" id="budget">–</span></div>
+          <button class="primary" id="save">Save schedule</button>
+        </section>
+      </div>
+
+      <div class="tab" id="tab-now" role="tabpanel" hidden>
+        <section class="panel">
+          <div class="chips lights" id="now-lights"></div>
+          <div class="swatch" id="now-sw"></div>
+          <div class="field">
+            <div class="rangeval"><span>Colour</span><b id="now-k-v">4000 K</b></div>
+            <input type="range" id="now-k" min="2000" max="9000" step="100" value="4000" aria-label="Colour temperature">
+          </div>
+          <div class="field">
+            <div class="rangeval"><span>Brightness</span><b id="now-b-v">60 %</b></div>
+            <input type="range" id="now-b" min="1" max="100" step="1" value="60" aria-label="Brightness">
+          </div>
+          <div class="row">
+            <button class="primary" data-act="apply">Apply</button>
+            <button data-act="off">Turn off</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="tab" id="sec-bike" role="tabpanel" hidden>
+      <section class="panel" id="bike-summary"><p class="note">Loading the bike…</p></section>
+      <section class="panel today" id="bike-today"></section>
+      <section class="panel" id="ride-form" hidden>
+        <h2>Add a ride</h2>
+        <div class="grid2">
+          <div class="field"><label for="r-date">Date</label><input type="date" id="r-date"></div>
+          <div class="field"><label for="r-km">Distance (km)</label><input type="number" inputmode="decimal" id="r-km" min="1" max="400" step="0.1" placeholder="35"></div>
+        </div>
+        <div class="field"><span class="label">Surface</span>
+          <div class="seg2" id="r-surface">
+            <label class="chip"><input type="radio" name="r-surface" value="road" checked><span>Road</span></label>
+            <label class="chip"><input type="radio" name="r-surface" value="gravel"><span>Gravel / dirt</span></label>
+          </div>
+        </div>
+        <label class="switch"><input type="checkbox" id="r-wet"> Wet or muddy</label>
+        <div class="field"><label for="r-note">Note (optional)</label><input type="text" id="r-note" autocomplete="off" placeholder="Sunday loop"></div>
+        <div class="row"><button class="primary" id="r-save">Save ride</button><button id="r-cancel">Cancel</button></div>
+      </section>
       <section class="panel">
-        <div class="budget"><span>Actions min / month</span><span class="bar"><i id="budget-bar"></i></span><span class="num" id="budget">–</span></div>
-        <button class="primary" id="save">Save schedule</button>
+        <div class="panel-head"><div class="titles"><span class="eyebrow">Garage</span><h2>Maintenance</h2></div><div class="pills" id="bike-pills"></div></div>
+        <div class="parts" id="parts"></div>
+      </section>
+      <section class="panel">
+        <h2>Recent rides</h2>
+        <div class="list" id="rides"></div>
+      </section>
+      <section class="panel">
+        <details id="away">
+          <summary>Days without commuting (holidays, sick days)</summary>
+          <div class="field" style="gap:12px">
+            <div class="grid2">
+              <div class="field"><label for="a-from">From</label><input type="date" id="a-from"></div>
+              <div class="field"><label for="a-to">To</label><input type="date" id="a-to"></div>
+            </div>
+            <button id="a-add">Add</button>
+            <div class="list" id="away-list"></div>
+          </div>
+        </details>
+        <details id="bike-setup">
+          <summary>Bike and commute</summary>
+          <div class="field" style="gap:12px">
+            <div class="grid2">
+              <div class="field"><label for="b-name">Name</label><input type="text" id="b-name" autocomplete="off"></div>
+              <div class="field"><label for="b-initial">Km before the app</label><input type="number" inputmode="numeric" id="b-initial" min="0"></div>
+            </div>
+            <label class="switch"><input type="checkbox" id="c-on"> Count my commute automatically</label>
+            <div class="grid2">
+              <div class="field"><label for="c-km">Commute per day (km)</label><input type="number" inputmode="decimal" id="c-km" min="1" step="0.5"></div>
+              <div class="field"><label for="c-since">Counting since</label><input type="date" id="c-since"></div>
+            </div>
+            <div id="c-days-wrap"></div>
+            <button id="b-save">Save bike</button>
+          </div>
+        </details>
       </section>
     </div>
 
-    <div class="tab" id="tab-now" role="tabpanel" hidden>
-      <section class="panel">
-        <div class="chips lights" id="now-lights"></div>
-        <div class="swatch" id="now-sw"></div>
-        <div class="field">
-          <div class="rangeval"><span>Colour</span><b id="now-k-v">4000 K</b></div>
-          <input type="range" id="now-k" min="2000" max="9000" step="100" value="4000" aria-label="Colour temperature">
-        </div>
-        <div class="field">
-          <div class="rangeval"><span>Brightness</span><b id="now-b-v">60 %</b></div>
-          <input type="range" id="now-b" min="1" max="100" step="1" value="60" aria-label="Brightness">
-        </div>
-        <div class="row">
-          <button class="primary" data-act="apply">Apply</button>
-          <button data-act="off">Turn off</button>
-        </div>
-      </section>
-    </div>
-
-    <div class="tab" id="tab-devices" role="tabpanel" hidden>
+    <div class="tab" id="sec-settings" role="tabpanel" hidden>
       <section class="panel">
         <h2>Shelly plugs</h2>
         <div class="grid2">
@@ -530,30 +635,245 @@ button:disabled { opacity: .5; cursor: progress; }
     } catch { /* runs are a nice-to-have */ }
   }
 
-  // ---------- tabs
+  // ---------- navigation
+  const SECTIONS = ["lights", "bike", "settings"], LTABS = ["schedule", "now"];
+  function showSection(name) {
+    if (!SECTIONS.includes(name)) name = "lights";
+    for (const t of SECTIONS) {
+      $(`#sec-${t}`).hidden = t !== name;
+      $(`#t-${t}`).setAttribute("aria-selected", String(t === name));
+    }
+    store.set("bl.section", name);
+    if (name === "settings") loadRuns();
+    if (name === "bike") renderBike();
+  }
   function showTab(name) {
-    for (const t of ["schedule", "now", "devices"]) {
+    if (!LTABS.includes(name)) name = "schedule";
+    for (const t of LTABS) {
       $(`#tab-${t}`).hidden = t !== name;
       $(`#t-${t}`).setAttribute("aria-selected", String(t === name));
     }
     store.set("bl.tab", name);
-    if (name === "devices") loadRuns();
   }
-  for (const t of ["schedule", "now", "devices"]) $(`#t-${t}`).addEventListener("click", () => showTab(t));
+  for (const t of SECTIONS) $(`#t-${t}`).addEventListener("click", () => showSection(t));
+  for (const t of LTABS) $(`#t-${t}`).addEventListener("click", () => showTab(t));
+
+  // ---------- bike
+  let garage = null;
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const parseISO = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const todayISO = () => iso(new Date());
+  const dayKey = (s) => DAYS[(parseISO(s).getDay() + 6) % 7];
+  const fmtDay = (s) => parseISO(s).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const fmtKm = (n) => (Math.round(n * 10) / 10).toLocaleString("en-GB");
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const skipped = (g, s) => g.skips.some((r) => s >= r.from && s <= r.to);
+  const commuteDay = (g, s) => !!(g.commute?.enabled && g.commute.since && s >= g.commute.since && g.commute.days.includes(dayKey(s)));
+
+  function allRides(g) {
+    const rides = g.rides.map((r) => ({ ...r }));
+    const c = g.commute, end = todayISO();
+    if (c?.enabled && c.since) {
+      for (let d = parseISO(c.since); iso(d) <= end; d.setDate(d.getDate() + 1)) {
+        const s = iso(d);
+        if (commuteDay(g, s) && !skipped(g, s)) rides.push({ date: s, km: c.km, surface: "road", wet: g.wet_days.includes(s), commute: true });
+      }
+    }
+    return rides.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }
+  function wearFactor(g, group, r) {
+    const f = g.factors?.[group] || { road: 1, gravel: 1, wet: 1 };
+    return (r.surface === "gravel" ? f.gravel : f.road) * (r.wet ? f.wet : 1);
+  }
+  function partStatus(g, p, rides) {
+    const fromDate = p.last?.date || g.bike.start_date;
+    const counted = rides.filter((r) => (p.last ? r.date > fromDate : r.date >= fromDate));
+    const used = counted.reduce((sum, r) => sum + r.km * wearFactor(g, p.group, r), 0);
+    const days = Math.max(0, Math.floor((parseISO(todayISO()) - parseISO(fromDate)) / 864e5));
+    const rk = p.every_km ? used / p.every_km : 0, rd = p.every_days ? days / p.every_days : 0;
+    const ratio = Math.max(rk, rd);
+    let label;
+    if (p.every_km && rk >= rd) {
+      const left = Math.round(p.every_km - used);
+      label = left > 0 ? `in ${left} km` : left === 0 ? "now" : `${-left} km over`;
+    } else {
+      const left = p.every_days - days;
+      label = left > 1 ? `in ${left} days` : left === 1 ? "tomorrow" : left === 0 ? "today" : `${-left} days over`;
+    }
+    return { used, days, ratio, label, state: ratio >= 1 ? "due" : ratio >= 0.8 ? "soon" : "ok" };
+  }
+
+  function renderBike() {
+    if (!garage) return;
+    const g = garage, rides = allRides(g), t = todayISO();
+    const parts = g.components.map((p) => ({ p, s: p.enabled === false ? null : partStatus(g, p, rides) }));
+    const due = parts.filter((x) => x.s?.state === "due").length, soon = parts.filter((x) => x.s?.state === "soon").length;
+    $("#t-bike .badge").hidden = !due;
+
+    // summary
+    const sinceStart = rides.filter((r) => r.date >= g.bike.start_date);
+    const total = (g.bike.initial_km || 0) + sinceStart.reduce((a, r) => a + r.km, 0);
+    const monday = new Date(); monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const week = rides.filter((r) => r.date >= iso(monday)).reduce((a, r) => a + r.km, 0);
+    const month = rides.filter((r) => r.date >= t.slice(0, 8) + "01").reduce((a, r) => a + r.km, 0);
+    $("#bike-summary").innerHTML = `<div class="titles"><span class="eyebrow">${esc(g.bike.model)}</span><h2>${esc(g.bike.name)}</h2></div>
+      <div class="kpis"><div class="kpi"><b>${fmtKm(total)}</b><span>km total</span></div>
+      <div class="kpi"><b>${fmtKm(week)}</b><span>km this week</span></div><div class="kpi"><b>${fmtKm(month)}</b><span>km this month</span></div></div>
+      <p class="specs">${esc(g.bike.specs)}</p>`;
+
+    // today
+    const isC = commuteDay(g, t), isSkip = skipped(g, t), isWet = g.wet_days.includes(t);
+    const manualToday = g.rides.filter((r) => r.date === t).reduce((a, r) => a + r.km, 0);
+    $("#bike-today").innerHTML = `<div class="titles"><span class="eyebrow">Today</span><h2>${isC ? (isSkip ? "No commute today" : `Commute · ${fmtKm(g.commute.km)} km`) : "No commute today"}</h2></div>
+      <p class="note state">${isC ? (isSkip ? "Today isn't counted." : `Counted automatically${isWet ? ", marked as wet" : ""}.`) : "Not a commute day."}${manualToday ? ` Plus ${fmtKm(manualToday)} km added by hand.` : ""}</p>
+      ${isC ? `<div class="row three"><button data-skip="${t}" class="${isSkip ? "on" : ""}">Didn't ride</button>
+        <button data-wet="${t}" class="${isWet ? "on" : ""}" ${isSkip ? "disabled" : ""}>Rain</button><button class="primary" id="open-ride">Add ride</button></div>`
+        : `<button class="primary" id="open-ride">Add ride</button>`}`;
+
+    // parts
+    $("#bike-pills").innerHTML = due || soon ? `${due ? `<span class="pill due">${due} due</span>` : ""}${soon ? `<span class="pill soon">${soon} soon</span>` : ""}` : `<span class="pill ok">All good</span>`;
+    const order = parts.slice().sort((a, b) => (b.s ? b.s.ratio : -1) - (a.s ? a.s.ratio : -1));
+    $("#parts").innerHTML = order.map(({ p, s }) => {
+      const last = p.last ? `Last done ${fmtDay(p.last.date)}${p.last.km != null ? ` at ${fmtKm(p.last.km)} km` : ""}.` : "Not done yet: counting from when the bike was new.";
+      const every = [p.every_km && `${p.every_km} km`, p.every_days && `${p.every_days} days`].filter(Boolean).join(" or ");
+      return `<details class="part ${s ? s.state : "off"}" data-part="${p.id}">
+        <summary><span class="pname">${esc(p.name)}</span><span class="pstat">${s ? s.label : "off"}</span>
+        <span class="pbar"><i style="width:${s ? Math.min(100, Math.round(s.ratio * 100)) : 0}%"></i></span></summary>
+        <div class="pbody">
+          <p class="note">${esc(p.howto)}</p>
+          <p class="note">Every ${every || "–"}. ${last}</p>
+          <div class="grid2">
+            <div class="field"><label for="ek-${p.id}">Every (km)</label><input type="number" inputmode="numeric" id="ek-${p.id}" min="0" value="${p.every_km ?? ""}" placeholder="–"></div>
+            <div class="field"><label for="ed-${p.id}">Every (days)</label><input type="number" inputmode="numeric" id="ed-${p.id}" min="0" value="${p.every_days ?? ""}" placeholder="–"></div>
+          </div>
+          <div class="row"><button class="primary" data-done="${p.id}" ${s ? "" : "disabled"}>Done today</button><button data-interval="${p.id}">Save interval</button></div>
+          <label class="switch"><input type="checkbox" data-enable="${p.id}" ${p.enabled === false ? "" : "checked"}> In use on this bike</label>
+        </div></details>`;
+    }).join("");
+
+    // rides
+    const recent = rides.slice(0, 8);
+    $("#rides").innerHTML = recent.length ? recent.map((r) => `<div class="item"><div><b class="num">${fmtKm(r.km)} km</b> · ${fmtDay(r.date)}<br>
+        <small>${r.commute ? "Commute" : esc(r.note || "Ride")} · ${r.surface === "gravel" ? "gravel" : "road"}${r.wet ? " · wet" : ""}</small></div>
+      <div class="acts">${r.commute ? `<button data-wet="${r.date}" class="${r.wet ? "on" : ""}">Rain</button><button data-skip="${r.date}">Remove</button>`
+        : `<button data-delride="${r.id}">Remove</button>`}</div></div>`).join("")
+      : `<p class="note">No rides yet. Your commute is counted from ${g.commute?.since ? fmtDay(g.commute.since) : "the date you set below"}; add other rides with Add ride.</p>`;
+
+    // away list + setup
+    const ranges = g.skips.filter((r) => r.from !== r.to);
+    $("#away-list").innerHTML = ranges.map((r) => `<div class="item"><div>${fmtDay(r.from)} – ${fmtDay(r.to)}</div><div class="acts"><button data-unaway="${r.from}|${r.to}">Remove</button></div></div>`).join("");
+    if (!$("#bike-setup").open) {
+      $("#b-name").value = g.bike.name; $("#b-initial").value = g.bike.initial_km || 0;
+      $("#c-on").checked = !!g.commute?.enabled; $("#c-km").value = g.commute?.km ?? 14; $("#c-since").value = g.commute?.since || t;
+      $("#c-days-wrap").innerHTML = chipDays("c-days", g.commute?.days || DAYS.slice(0, 5));
+    }
+  }
+
+  let saving = Promise.resolve();
+  function saveGarage(message) {
+    renderBike();
+    const snapshot = JSON.stringify(garage, null, 2) + "\n";
+    saving = saving.then(async () => {
+      toast("Saving…");
+      try {
+        const latest = await getFile("garage.json");
+        await putFile("garage.json", snapshot, latest.sha, message);
+        toast("Saved.", "ok");
+      } catch (err) { toast(err.message, "err"); }
+    });
+    return saving;
+  }
+  function toggleSkip(date) {
+    const i = garage.skips.findIndex((r) => r.from === date && r.to === date);
+    if (i >= 0) garage.skips.splice(i, 1);
+    else garage.skips.push({ from: date, to: date });
+    saveGarage(`Bike: ${i >= 0 ? "count" : "skip"} commute on ${date}`);
+  }
+  function toggleWet(date) {
+    const i = garage.wet_days.indexOf(date);
+    if (i >= 0) garage.wet_days.splice(i, 1); else garage.wet_days.push(date);
+    saveGarage(`Bike: ${date} ${i >= 0 ? "dry" : "wet"}`);
+  }
+  function currentKm() {
+    return (garage.bike.initial_km || 0) + allRides(garage).filter((r) => r.date >= garage.bike.start_date).reduce((a, r) => a + r.km, 0);
+  }
+
+  $("#sec-bike").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || !garage) return;
+    const d = b.dataset;
+    if (b.id === "open-ride") {
+      $("#ride-form").hidden = false; $("#r-date").value = todayISO(); $("#r-km").focus();
+      $("#ride-form").scrollIntoView({ behavior: "smooth", block: "center" });
+    } else if (d.skip) toggleSkip(d.skip);
+    else if (d.wet) toggleWet(d.wet);
+    else if (d.delride) { garage.rides = garage.rides.filter((r) => String(r.id) !== d.delride); saveGarage("Bike: remove ride"); }
+    else if (d.done) {
+      const p = garage.components.find((x) => x.id === d.done), km = Math.round(currentKm());
+      p.last = { date: todayISO(), km };
+      garage.log.unshift({ date: todayISO(), part: p.id, km });
+      saveGarage(`Bike: ${p.name} done`);
+    } else if (d.interval) {
+      const p = garage.components.find((x) => x.id === d.interval);
+      const k = Number($(`#ek-${p.id}`).value), dd = Number($(`#ed-${p.id}`).value);
+      if (k > 0) p.every_km = k; else delete p.every_km;
+      if (dd > 0) p.every_days = dd; else delete p.every_days;
+      if (!p.every_km && !p.every_days) { toast("Set at least a distance or a number of days.", "err"); return; }
+      saveGarage(`Bike: ${p.name} interval`);
+    } else if (d.unaway) {
+      const [from, to] = d.unaway.split("|");
+      garage.skips = garage.skips.filter((r) => !(r.from === from && r.to === to));
+      saveGarage("Bike: remove days off");
+    }
+  });
+  $("#sec-bike").addEventListener("change", (e) => {
+    const id = e.target.dataset?.enable;
+    if (!id || !garage) return;
+    garage.components.find((x) => x.id === id).enabled = e.target.checked;
+    saveGarage(`Bike: ${id} ${e.target.checked ? "on" : "off"}`);
+  });
+  $("#r-cancel").addEventListener("click", () => { $("#ride-form").hidden = true; });
+  $("#r-save").addEventListener("click", () => {
+    const km = Number($("#r-km").value), date = $("#r-date").value;
+    if (!(km > 0) || !date) { toast("Enter the date and the distance.", "err"); return; }
+    garage.rides.push({ id: Date.now(), date, km, surface: document.querySelector('input[name="r-surface"]:checked').value,
+      wet: $("#r-wet").checked, note: $("#r-note").value.trim() || undefined });
+    $("#ride-form").hidden = true; $("#r-km").value = ""; $("#r-note").value = ""; $("#r-wet").checked = false;
+    saveGarage(`Bike: ride ${km} km on ${date}`);
+  });
+  $("#a-add").addEventListener("click", () => {
+    const from = $("#a-from").value, to = $("#a-to").value || from;
+    if (!from || to < from) { toast("Pick a start date, and an end date after it.", "err"); return; }
+    garage.skips.push({ from, to });
+    saveGarage(`Bike: days off ${from} to ${to}`);
+  });
+  $("#b-save").addEventListener("click", () => {
+    garage.bike.name = $("#b-name").value.trim() || garage.bike.name;
+    garage.bike.initial_km = Math.max(0, Number($("#b-initial").value) || 0);
+    garage.commute = { ...garage.commute, enabled: $("#c-on").checked, km: Math.max(0, Number($("#c-km").value) || 0),
+      since: $("#c-since").value || garage.commute?.since || todayISO(), days: checked("c-days") };
+    $("#bike-setup").open = false;
+    saveGarage("Bike: settings");
+  });
 
   async function load() {
     try {
       cfg = JSON.parse((await getFile("config.json")).text);
       $("#setup").hidden = true; $("#app").hidden = false;
       renderPanels(); syncModeNote();
-      showTab(store.get("bl.tab") || "schedule");
+      showTab(store.get("bl.tab"));
+      try { garage = JSON.parse((await getFile("garage.json")).text); garage.skips ||= []; garage.wet_days ||= []; garage.rides ||= []; garage.log ||= []; }
+      catch { $("#bike-summary").innerHTML = `<p class="note">No bike data found in the repository (garage.json).</p>`; }
+      renderBike();
+      showSection(store.get("bl.section"));
     } catch (err) {
       $("#setup").hidden = false; $("#app").hidden = true;
       if (token) $("#setup-note").textContent = `${err.message} Paste a fine-grained token for bedroom-lights with Contents and Actions set to Read and write.`;
     }
   }
 
-  document.addEventListener("input", (e) => { if (cfg && e.target.closest("#app")) refresh(); });
+  document.addEventListener("input", (e) => { if (cfg && e.target.closest("#sec-lights, #sec-settings")) refresh(); });
+  $("#today-label").textContent = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   $("#connect").addEventListener("click", () => {
     token = $("#tok").value.trim(); repo = $("#repo").value.trim() || repo;
     store.set("bl.token", token); store.set("bl.repo", repo); load();
