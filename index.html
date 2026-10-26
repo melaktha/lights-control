@@ -569,11 +569,24 @@ details.part.off { opacity: .55; }
     if (!plug?.id) throw new Error(`Add the ${plug?.name || plugKey} plug ID in Devices.`);
     const k = keys(), body = { id: plug.id, channel: 0, on };
     if (toggleAfter) body.toggle_after = toggleAfter;
-    const host = k.host.replace(/^https?:\/\//, "").replace(/\/$/, "");
-    const res = await fetch(`https://${host}/v2/devices/api/set/switch?auth_key=${encodeURIComponent(k.shelly)}`, {
+    const res = await fetch(`https://${shellyHost()}/v2/devices/api/set/switch?auth_key=${encodeURIComponent(k.shelly)}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(`${plug.name}: Shelly ${res.status}`);
     await sleep(1100); // Shelly cloud allows one request per second
+  }
+  const shellyHost = () => keys().host.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  async function shellyIsOn(plugKey) {
+    // the plug's relay state: Govee's cloud can keep saying "online" for a while after power is cut
+    const plug = cfg.shelly_plugs[plugKey];
+    if (!plug?.id) return null;
+    const res = await fetch(`https://${shellyHost()}/v2/devices/api/get?auth_key=${encodeURIComponent(keys().shelly)}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [plug.id], select: ["status"] }) });
+    await sleep(1100); // Shelly cloud allows one request per second
+    if (!res.ok) return null;
+    const j = await res.json().catch(() => null);
+    const list = Array.isArray(j) ? j : j?.data || j?.devices || [];
+    const out = list[0]?.status?.["switch:0"]?.output;
+    return typeof out === "boolean" ? out : null;
   }
   async function setLight(key, kelvin, brightness) {
     const lt = cfg.govee_lights[key];
@@ -583,17 +596,23 @@ details.part.off { opacity: .55; }
       await goveeCmd(lt, "devices.capabilities.range", "brightness", brightness);
       await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 1);
     };
-    try { await run(); }
-    catch (err) {
-      if (!(lt.power_plug && /offline/i.test(err.message))) throw err;
-      toast(`${lt.name} had no power: switching it on, about 20 seconds…`);
+    if (lt.power_plug && (await shellyIsOn(lt.power_plug)) !== true) {
+      toast(`Switching on the ${lt.name}: about 20 seconds…`);
       await shellyCmd(lt.power_plug, true);
-      for (let i = 0; i < 12; i++) {
-        await sleep(5000);
-        try { await run(); return; } catch (e) { if (!/offline/i.test(e.message)) throw e; }
+      await sleep(15000);
+      for (let i = 0; ; i++) {
+        try { await run(); break; }
+        catch (e) {
+          if (!/offline/i.test(e.message)) throw e;
+          if (i >= 11) throw new Error(`${lt.name} is still offline. Check the hotspot.`);
+          await sleep(5000);
+        }
       }
-      throw new Error(`${lt.name} is still offline. Check the hotspot.`);
+      await sleep(8000); // a light that has just reconnected can miss the first commands: send them again
+      try { await run(); } catch { /* the first round already went through */ }
+      return;
     }
+    await run();
   }
   async function direct(args, action) {
     if (action === "plug") {
