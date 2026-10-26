@@ -240,6 +240,14 @@ details.part.off { opacity: .55; }
             <button class="primary" data-act="apply">Apply</button>
             <button data-act="off">Turn off</button>
           </div>
+          <p class="note">Apply also switches the Lyra's plug on. Turn off first leaves the Lyra warm and dim, so it never comes back cold: use these buttons instead of the Shelly app.</p>
+        </section>
+        <section class="panel">
+          <div class="titles"><span class="eyebrow">Light therapy</span><h2>TL40</h2></div>
+          <div class="row">
+            <button class="primary" data-tl="on" id="tl-on-btn">On for 30 min</button>
+            <button data-tl="off">Off</button>
+          </div>
         </section>
       </div>
     </div>
@@ -444,6 +452,12 @@ details.part.off { opacity: .55; }
       ${chipDays("warm-days", w.days)}
       ${chipLights("warm-lights", w.lights)}
       <p class="note">Lights that are on turn warm and keep their brightness. Lights that are off stay off.</p>`;
+    const w0 = cfg.routines.warm, s0 = cfg.routines.sunrise, nowHM = new Date().toTimeString().slice(0, 5);
+    if (!renderPanels.done && w0?.enabled && (nowHM >= w0.time || nowHM < s0.time)) {
+      $("#now-k").value = w0.kelvin; $("#now-b").value = 40;
+    }
+    renderPanels.done = true;
+    $("#tl-on-btn").textContent = `On for ${s0.tl40?.on_min || 30} min`;
     $("#now-lights").innerHTML = Object.entries(cfg.govee_lights).map(([k, l]) =>
       `<label class="chip"><input type="checkbox" value="${k}" checked><span>${l.name}</span></label>`).join("");
     $("#id-lyra").value = cfg.shelly_plugs?.lyra?.id || "";
@@ -581,8 +595,10 @@ details.part.off { opacity: .55; }
       throw new Error(`${lt.name} is still offline. Check the hotspot.`);
     }
   }
-  async function direct(args) {
-    if (args.power === "off") {
+  async function direct(args, action) {
+    if (action === "plug") {
+      await shellyCmd(args.plug, args.on, args.minutes ? args.minutes * 60 : undefined);
+    } else if (args.power === "off") {
       for (const key of args.lights) {
         const lt = cfg.govee_lights[key];
         if (lt.power_plug) {
@@ -598,29 +614,29 @@ details.part.off { opacity: .55; }
       await Promise.all(args.lights.map((key) => setLight(key, args.kelvin, args.brightness)));
     }
   }
-  async function dispatch(args) {
+  async function dispatch(args, action = "set") {
     await gh(`/actions/workflows/lights.yml/dispatches`, { method: "POST",
-      body: JSON.stringify({ ref: "main", inputs: { action: "set", args: JSON.stringify(args) } }) });
+      body: JSON.stringify({ ref: "main", inputs: { action, args: JSON.stringify(args) } }) });
     toast("Sent through GitHub. The lamps react in about half a minute.", "ok");
     setTimeout(loadRuns, 4000);
   }
-  async function command(args) {
-    if (!args.lights.length) { toast("Select at least one light.", "err"); return; }
+  async function command(args, action = "set") {
+    if (action === "set" && !args.lights.length) { toast("Select at least one light.", "err"); return; }
     toast("Sending…");
     try {
-      if (!hasDirect() || directBlocked) return await dispatch(args);
-      try { await direct(args); toast("Done.", "ok"); }
+      if (!hasDirect() || directBlocked) return await dispatch(args, action);
+      try { await direct(args, action); toast("Done.", "ok"); }
       catch (err) {
         if (!(err instanceof TypeError)) throw err; // TypeError = the browser refused the request
         directBlocked = true; syncModeNote();
-        await dispatch(args);
+        await dispatch(args, action);
       }
     } catch (err) { toast(err.message, "err"); }
   }
   function syncModeNote() {
     $("#mode-note").textContent = hasDirect() && !directBlocked
-      ? "On. Apply and Turn off go straight to the lamps. Keys are saved only in this phone's browser."
-      : "Off. Apply and Turn off go through GitHub (about half a minute). Add the keys to reach the lamps directly; they are saved only in this phone's browser.";
+      ? "On. Apply, Turn off and the TL40 buttons go straight to the lamps. Keys are saved only in this phone's browser."
+      : "Off. Apply, Turn off and the TL40 buttons go through GitHub (about half a minute). Add the keys to reach the lamps directly; they are saved only in this phone's browser.";
   }
   async function loadRuns() {
     try {
@@ -894,6 +910,10 @@ details.part.off { opacity: .55; }
     const lights = checked("now-lights");
     if (b.dataset.act === "apply") command({ lights, kelvin: Number($("#now-k").value), brightness: Number($("#now-b").value) });
     else command({ lights, power: "off" });
+  }));
+  document.querySelectorAll("[data-tl]").forEach((b) => b.addEventListener("click", () => {
+    const minutes = cfg?.routines?.sunrise?.tl40?.on_min || 30;
+    command(b.dataset.tl === "on" ? { plug: "tl40", on: true, minutes } : { plug: "tl40", on: false }, "plug");
   }));
 
   // Example strip before connecting, so the page never opens empty
