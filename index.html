@@ -612,7 +612,12 @@ details.part.off { opacity: .55; }
       method: "POST", headers: { "Govee-API-Key": keys().govee, "Content-Type": "application/json" },
       body: JSON.stringify({ requestId: String(Date.now()), payload: { sku: lt.sku, device: lt.device, capability: { type, instance, value } } }) });
     const j = await res.json().catch(() => ({}));
-    if (j.code !== 200) throw new Error(`${lt.name}: ${j.msg || res.status}`);
+    if (j.code !== 200) {
+      const msg = String(j.msg || res.status);
+      if (/offline/i.test(msg) && !lt.power_plug)
+        throw new Error(`${lt.name}: Govee's cloud can't reach it. In the Govee app, check it's connected to Wi-Fi (the hotspot), not only Bluetooth.`);
+      throw new Error(`${lt.name}: ${msg}`);
+    }
   }
   async function shellyCmd(plugKey, on, toggleAfter) {
     const plug = cfg.shelly_plugs[plugKey];
