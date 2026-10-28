@@ -312,6 +312,13 @@ details.part.off { opacity: .55; }
 
     <div class="tab" id="sec-settings" role="tabpanel" hidden>
       <section class="panel">
+        <h2>Govee lights</h2>
+        <p class="note">"Warmest" is the lowest colour temperature the app will send to that light. Raise it if a light turns orange or red instead of warm white.</p>
+        <div class="list" id="light-list"></div>
+        <div class="row"><button id="find-lights">Look for new lights</button><button class="primary" id="save-lights">Save lights</button></div>
+        <div class="list" id="found-lights"></div>
+      </section>
+      <section class="panel">
         <h2>Shelly plugs</h2>
         <div class="grid2">
           <div class="field"><label for="id-lyra">Lyra plug ID</label><input id="id-lyra" type="text" autocomplete="off" placeholder="b48a0a1cd978"></div>
@@ -479,6 +486,10 @@ details.part.off { opacity: .55; }
     delete R.tl40;
     R.warm = { ...R.warm, enabled: $("#warm-on").checked, time: $("#warm-time").value || R.warm.time,
       days: checked("warm-days"), lights: checked("warm-lights"), kelvin: Number($("#warm-k").value) };
+    for (const [key, lt] of Object.entries(c.govee_lights)) {
+      const v = Number($(`#wk-${key}`)?.value);
+      if (v) c.govee_lights[key].min_kelvin = Math.min(Math.max(v, lt.hw_min_kelvin || 2000), (lt.max_kelvin || 9000) - 100);
+    }
     c.shelly_plugs.lyra.id = $("#id-lyra").value.trim();
     c.shelly_plugs.tl40.id = $("#id-tl40").value.trim();
     c.lead_minutes = num("#lead", 3);
@@ -557,6 +568,45 @@ details.part.off { opacity: .55; }
   const hasDirect = () => { const k = keys(); return !!(k.govee && k.shelly && k.host); };
   let directBlocked = false;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function renderLightList() {
+    $("#light-list").innerHTML = Object.entries(cfg.govee_lights).map(([key, lt]) => `<div class="item">
+      <div><b>${esc(lt.name)}</b><br><small>${esc(lt.sku)}${lt.power_plug ? " · on a Shelly plug" : ""} · up to ${lt.max_kelvin || 9000} K</small></div>
+      <div class="field" style="width:6.5rem"><label for="wk-${key}">Warmest (K)</label>
+        <input type="number" inputmode="numeric" id="wk-${key}" min="${lt.hw_min_kelvin || 2000}" max="${(lt.max_kelvin || 9000) - 100}" step="100" value="${lt.min_kelvin || 2000}"></div></div>`).join("");
+  }
+  let foundLights = [];
+  async function findLights() {
+    if (!keys().govee) { toast("Add the Govee API key under Instant control first.", "err"); return; }
+    toast("Looking for lights…");
+    try {
+      const res = await fetch("https://openapi.api.govee.com/router/api/v1/user/devices", { headers: { "Govee-API-Key": keys().govee } });
+      const j = await res.json();
+      if (j.code !== 200) throw new Error(`Govee: ${j.msg || res.status}`);
+      const known = new Set(Object.values(cfg.govee_lights).map((l) => l.device));
+      foundLights = (j.data || []).filter((d) => d.type === "devices.types.light" && !known.has(d.device)).map((d) => {
+        const ct = (d.capabilities || []).find((c) => c.instance === "colorTemperatureK")?.parameters?.range || {};
+        return { name: d.deviceName || d.sku, sku: d.sku, device: d.device, min: ct.min || 2000, max: ct.max || 9000 };
+      });
+      $("#found-lights").innerHTML = foundLights.length ? foundLights.map((d, i) => `<div class="item">
+        <div><b>${esc(d.name)}</b><br><small>${esc(d.sku)} · ${d.min}–${d.max} K</small></div>
+        <div class="acts"><button class="primary" data-addlight="${i}">Add</button></div></div>`).join("")
+        : `<p class="note">No new lights found. Check that the light is set up in the Govee app and connected.</p>`;
+      toast(foundLights.length ? `Found ${foundLights.length} new light${foundLights.length > 1 ? "s" : ""}.` : "", "ok");
+    } catch (err) { toast(err instanceof TypeError ? "This browser can't reach Govee directly." : err.message, "err"); }
+  }
+  async function addLight(i, btn) {
+    const d = foundLights[i];
+    let key = (d.name || d.sku).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "").slice(0, 16) || d.sku.toLowerCase();
+    while (cfg.govee_lights[key]) key += "2";
+    // warm white, never red: start the warm end at the same white-yellow the evening routine uses
+    const floor = Math.min(Math.max(d.min, cfg.routines.warm?.kelvin || 2700), d.max - 100);
+    cfg.govee_lights[key] = { name: d.name, sku: d.sku, device: d.device, min_kelvin: floor, max_kelvin: d.max, hw_min_kelvin: d.min };
+    if (cfg.routines.warm && !cfg.routines.warm.lights.includes(key)) cfg.routines.warm.lights.push(key);
+    renderPanels(); renderLightList();
+    foundLights.splice(i, 1); $("#found-lights").innerHTML = "";
+    await saveConfig(btn, "lights");
+  }
+
   async function goveeCmd(lt, type, instance, value) {
     const res = await fetch("https://openapi.api.govee.com/router/api/v1/device/control", {
       method: "POST", headers: { "Govee-API-Key": keys().govee, "Content-Type": "application/json" },
@@ -895,7 +945,7 @@ details.part.off { opacity: .55; }
     try {
       cfg = JSON.parse((await getFile("config.json")).text);
       $("#setup").hidden = true; $("#app").hidden = false;
-      renderPanels(); syncModeNote();
+      renderPanels(); renderLightList(); syncModeNote();
       showTab(store.get("bl.tab"));
       try { garage = JSON.parse((await getFile("garage.json")).text); garage.skips ||= []; garage.wet_days ||= []; garage.rides ||= []; garage.log ||= []; }
       catch { $("#bike-summary").innerHTML = `<p class="note">No bike data found in the repository (garage.json).</p>`; }
@@ -915,6 +965,9 @@ details.part.off { opacity: .55; }
   });
   $("#save").addEventListener("click", (e) => saveConfig(e.currentTarget, "schedule"));
   $("#save-devices").addEventListener("click", (e) => saveConfig(e.currentTarget, "devices"));
+  $("#save-lights").addEventListener("click", (e) => saveConfig(e.currentTarget, "lights").then(renderLightList));
+  $("#find-lights").addEventListener("click", findLights);
+  $("#found-lights").addEventListener("click", (e) => { const b = e.target.closest("[data-addlight]"); if (b) addLight(Number(b.dataset.addlight), b); });
   $("#save-keys").addEventListener("click", () => {
     store.set("bl.govee", $("#k-govee").value.trim()); store.set("bl.shelly", $("#k-shelly").value.trim());
     store.set("bl.host", $("#k-host").value.trim()); directBlocked = false; syncModeNote();
