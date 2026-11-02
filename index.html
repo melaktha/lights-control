@@ -240,7 +240,7 @@ details.part.off { opacity: .55; }
             <button class="primary" data-act="apply">Apply</button>
             <button data-act="off">Turn off</button>
           </div>
-          <p class="note">Apply also switches the Lyra's plug on. Turn off first leaves the Lyra warm and dim, so it never comes back cold: use these buttons instead of the Shelly app.</p>
+          <p class="note">Apply also switches the Lyra's plug on. Turn off fades every light to warm and dim over about five seconds, then switches it off, so it never comes back cold.</p>
         </section>
         <section class="panel">
           <div class="titles"><span class="eyebrow">Light therapy</span><h2>TL40</h2></div>
@@ -673,17 +673,18 @@ details.part.off { opacity: .55; }
     if (action === "plug") {
       await shellyCmd(args.plug, args.on, args.minutes ? args.minutes * 60 : undefined);
     } else if (args.power === "off") {
-      for (const key of args.lights) {
+      // Same goodnight for every light: warm, then dim in steps, then off. It also leaves each
+      // light warm and dim, so it comes back gently next time.
+      await Promise.all(args.lights.map(async (key) => {
         const lt = cfg.govee_lights[key];
-        if (lt.power_plug) {
-          // leave it warm and dim first, so it fades in gently when power returns
-          try {
-            await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
-            await goveeCmd(lt, "devices.capabilities.range", "brightness", 1);
-          } catch { /* already offline: just cut the power */ }
-          await shellyCmd(lt.power_plug, false);
-        } else await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 0);
-      }
+        try {
+          await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
+          for (const b of [25, 8, 1]) { await sleep(1200); await goveeCmd(lt, "devices.capabilities.range", "brightness", b); }
+          await sleep(1200);
+        } catch (e) { if (!lt.power_plug) throw e; /* already unpowered: just cut the power */ }
+        if (lt.power_plug) await shellyCmd(lt.power_plug, false);
+        else await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 0);
+      }));
     } else {
       await Promise.all(args.lights.map((key) => setLight(key, args.kelvin, args.brightness)));
     }
