@@ -240,7 +240,7 @@ details.part.off { opacity: .55; }
             <button class="primary" data-act="apply">Apply</button>
             <button data-act="off">Turn off</button>
           </div>
-          <p class="note">Apply also switches the Lyra's plug on. Turn off fades every light to warm and dim over about five seconds, then switches it off, so it never comes back cold.</p>
+          <p class="note">Apply also switches the Lyra's plug on. Turn off fades every light to warm and dim, then switches it off, so it never comes back cold. Fade times are in Settings.</p>
         </section>
         <section class="panel">
           <div class="titles"><span class="eyebrow">Light therapy</span><h2>TL40</h2></div>
@@ -313,7 +313,7 @@ details.part.off { opacity: .55; }
     <div class="tab" id="sec-settings" role="tabpanel" hidden>
       <section class="panel">
         <h2>Govee lights</h2>
-        <p class="note">"Warmest" is the lowest colour temperature the app will send to that light. Raise it if a light turns orange or red instead of warm white.</p>
+        <p class="note">"Warmest" is the lowest colour temperature the app will send to that light. Raise it if a light turns orange or red instead of warm white. "Fade" is how long lights without a plug take to dim, brighten or switch off.</p>
         <div class="list" id="light-list"></div>
         <div class="row"><button id="find-lights">Look for new lights</button><button class="primary" id="save-lights">Save lights</button></div>
         <div class="list" id="found-lights"></div>
@@ -489,6 +489,8 @@ details.part.off { opacity: .55; }
     for (const [key, lt] of Object.entries(c.govee_lights)) {
       const v = Number($(`#wk-${key}`)?.value);
       if (v) c.govee_lights[key].min_kelvin = Math.min(Math.max(v, lt.hw_min_kelvin || 2000), (lt.max_kelvin || 9000) - 100);
+      const f = $(`#fs-${key}`)?.value;
+      if (f !== undefined && f !== "") c.govee_lights[key].fade_seconds = Math.max(0, Math.min(60, Number(f) || 0));
     }
     c.shelly_plugs.lyra.id = $("#id-lyra").value.trim();
     c.shelly_plugs.tl40.id = $("#id-tl40").value.trim();
@@ -572,7 +574,9 @@ details.part.off { opacity: .55; }
     $("#light-list").innerHTML = Object.entries(cfg.govee_lights).map(([key, lt]) => `<div class="item">
       <div><b>${esc(lt.name)}</b><br><small>${esc(lt.sku)}${lt.power_plug ? " · on a Shelly plug" : ""} · up to ${lt.max_kelvin || 9000} K</small></div>
       <div class="field" style="width:6.5rem"><label for="wk-${key}">Warmest (K)</label>
-        <input type="number" inputmode="numeric" id="wk-${key}" min="${lt.hw_min_kelvin || 2000}" max="${(lt.max_kelvin || 9000) - 100}" step="100" value="${lt.min_kelvin || 2000}"></div></div>`).join("");
+        <input type="number" inputmode="numeric" id="wk-${key}" min="${lt.hw_min_kelvin || 2000}" max="${(lt.max_kelvin || 9000) - 100}" step="100" value="${lt.min_kelvin || 2000}"></div>
+      ${lt.power_plug ? "" : `<div class="field" style="width:5.5rem"><label for="fs-${key}">Fade (s)</label>
+        <input type="number" inputmode="numeric" id="fs-${key}" min="0" max="60" value="${lt.fade_seconds ?? 12}"></div>`}</div>`).join("");
   }
   let foundLights = [];
   async function findLights() {
@@ -607,18 +611,20 @@ details.part.off { opacity: .55; }
     await saveConfig(btn, "lights");
   }
 
-  async function goveeCmd(lt, type, instance, value) {
+  async function goveeCmd(lt, type, instance, value, retry = true) {
     const res = await fetch("https://openapi.api.govee.com/router/api/v1/device/control", {
       method: "POST", headers: { "Govee-API-Key": keys().govee, "Content-Type": "application/json" },
       body: JSON.stringify({ requestId: String(Date.now()), payload: { sku: lt.sku, device: lt.device, capability: { type, instance, value } } }) });
     const j = await res.json().catch(() => ({}));
     if (j.code !== 200) {
       const msg = String(j.msg || res.status);
+      if (retry && (res.status === 429 || /limit|frequent/i.test(msg))) { await sleep(4000); return goveeCmd(lt, type, instance, value, false); }
       if (/offline/i.test(msg) && !lt.power_plug)
         throw new Error(`${lt.name}: Govee's cloud can't reach it. In the Govee app, check it's connected to Wi-Fi (the hotspot), not only Bluetooth.`);
       throw new Error(`${lt.name}: ${msg}`);
     }
   }
+
   async function shellyCmd(plugKey, on, toggleAfter) {
     const plug = cfg.shelly_plugs[plugKey];
     if (!plug?.id) throw new Error(`Add the ${plug?.name || plugKey} plug ID in Devices.`);
@@ -643,6 +649,37 @@ details.part.off { opacity: .55; }
     const out = list[0]?.status?.["switch:0"]?.output;
     return typeof out === "boolean" ? out : null;
   }
+  // ---------- gradual transitions for lights without a plug
+  const smoothed = new Set();
+  async function smooth(lt) {
+    // the light's own "gradual change" setting, if it has one: fades every change in hardware
+    if (smoothed.has(lt.device)) return;
+    smoothed.add(lt.device);
+    try { await goveeCmd(lt, "devices.capabilities.toggle", "gradientToggle", 1); } catch { /* not supported */ }
+  }
+  async function goveeState(lt) {
+    try {
+      const res = await fetch("https://openapi.api.govee.com/router/api/v1/device/state", {
+        method: "POST", headers: { "Govee-API-Key": keys().govee, "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: String(Date.now()), payload: { sku: lt.sku, device: lt.device } }) });
+      const j = await res.json();
+      const st = {};
+      for (const c of j?.payload?.capabilities || []) st[c.instance] = c.state?.value;
+      return st;
+    } catch { return {}; }
+  }
+  async function fadeBrightness(lt, from, to, seconds) {
+    // a few steps spread over `seconds`: the cloud API accepts only a handful of commands a minute
+    const steps = Math.max(1, Math.min(4, Math.round(seconds / 3)));
+    const gap = (seconds * 1000) / steps;
+    for (let i = 1; i <= steps; i++) {
+      await sleep(gap);
+      const b = Math.max(1, Math.round(from + ((to - from) * i) / steps));
+      await goveeCmd(lt, "devices.capabilities.range", "brightness", b);
+    }
+  }
+  const fadeOf = (lt) => (lt.power_plug ? 0 : lt.fade_seconds ?? 12);
+
   async function setLight(key, kelvin, brightness) {
     const lt = cfg.govee_lights[key];
     const k = Math.max(lt.min_kelvin || 2000, Math.min(lt.max_kelvin || 9000, kelvin));
@@ -667,7 +704,21 @@ details.part.off { opacity: .55; }
       try { await run(); } catch { /* the first round already went through */ }
       return;
     }
-    await run();
+    const fade = fadeOf(lt);
+    if (!fade) return run();
+    await smooth(lt);
+    const st = await goveeState(lt);
+    const wasOn = st.powerSwitch === 1;
+    const from = wasOn && st.brightness ? st.brightness : 1;
+    if (!wasOn) {
+      // switch on at the bottom, then brighten
+      await goveeCmd(lt, "devices.capabilities.range", "brightness", 1);
+      await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", k);
+      await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 1);
+    } else {
+      await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", k);
+    }
+    if (from !== brightness) await fadeBrightness(lt, from, brightness, fade);
   }
   async function direct(args, action) {
     if (action === "plug") {
@@ -678,9 +729,18 @@ details.part.off { opacity: .55; }
       await Promise.all(args.lights.map(async (key) => {
         const lt = cfg.govee_lights[key];
         try {
-          await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
-          for (const b of [25, 8, 1]) { await sleep(1200); await goveeCmd(lt, "devices.capabilities.range", "brightness", b); }
-          await sleep(1200);
+          if (lt.power_plug) {
+            await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
+            for (const b of [25, 8, 1]) { await sleep(1200); await goveeCmd(lt, "devices.capabilities.range", "brightness", b); }
+            await sleep(1200);
+          } else {
+            await smooth(lt);
+            const st = await goveeState(lt);
+            if (st.powerSwitch === 0) return; // already off
+            await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
+            await fadeBrightness(lt, st.brightness || 60, 1, fadeOf(lt) || 2);
+            await sleep(1500);
+          }
         } catch (e) { if (!lt.power_plug) throw e; /* already unpowered: just cut the power */ }
         if (lt.power_plug) await shellyCmd(lt.power_plug, false);
         else await goveeCmd(lt, "devices.capabilities.on_off", "powerSwitch", 0);
