@@ -618,7 +618,10 @@ details.part.off { opacity: .55; }
     const j = await res.json().catch(() => ({}));
     if (j.code !== 200) {
       const msg = String(j.msg || res.status);
-      if (retry && (res.status === 429 || /limit|frequent/i.test(msg))) { await sleep(4000); return goveeCmd(lt, type, instance, value, false); }
+      if (res.status === 429 || /limit|frequent/i.test(msg)) {
+        if (retry) { await sleep(4000); return goveeCmd(lt, type, instance, value, false); }
+        throw new Error(`${lt.name}: rate limit (${res.status})`);
+      }
       if (/offline/i.test(msg) && !lt.power_plug)
         throw new Error(`${lt.name}: Govee's cloud can't reach it. In the Govee app, check it's connected to Wi-Fi (the hotspot), not only Bluetooth.`);
       throw new Error(`${lt.name}: ${msg}`);
@@ -669,13 +672,26 @@ details.part.off { opacity: .55; }
     } catch { return {}; }
   }
   async function fadeBrightness(lt, from, to, seconds) {
-    // a few steps spread over `seconds`: the cloud API accepts only a handful of commands a minute
-    const steps = Math.max(1, Math.min(4, Math.round(seconds / 3)));
-    const gap = (seconds * 1000) / steps;
-    for (let i = 1; i <= steps; i++) {
+    // Many small steps, spaced in perceived brightness (eyes notice jumps at low levels most).
+    // If Govee says "too many requests", slow down and carry on instead of failing.
+    const perceived = (b) => Math.pow(b / 100, 1 / 2.2), actual = (p) => 100 * Math.pow(p, 2.2);
+    const p0 = perceived(Math.max(1, from)), p1 = perceived(Math.max(1, to));
+    const start = Date.now(), total = seconds * 1000;
+    let gap = 500, last = from;
+    while (true) {
       await sleep(gap);
-      const b = Math.max(1, Math.round(from + ((to - from) * i) / steps));
-      await goveeCmd(lt, "devices.capabilities.range", "brightness", b);
+      const f = Math.min(1, (Date.now() - start) / total);
+      const b = Math.max(1, Math.min(100, Math.round(actual(p0 + (p1 - p0) * f))));
+      if (b !== last || f === 1) {
+        try { await goveeCmd(lt, "devices.capabilities.range", "brightness", b, false); last = b; }
+        catch (e) {
+          if (!/limit|frequent|429/i.test(e.message)) throw e;
+          gap = Math.min(gap * 2, 4000); // rate-limited: space the steps out
+          if (f === 1) { await sleep(gap); await goveeCmd(lt, "devices.capabilities.range", "brightness", Math.max(1, to)); return; }
+          continue;
+        }
+      }
+      if (f === 1) return;
     }
   }
   const fadeOf = (lt) => (lt.power_plug ? 0 : lt.fade_seconds ?? 12);
