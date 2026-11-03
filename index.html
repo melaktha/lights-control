@@ -313,7 +313,7 @@ details.part.off { opacity: .55; }
     <div class="tab" id="sec-settings" role="tabpanel" hidden>
       <section class="panel">
         <h2>Govee lights</h2>
-        <p class="note">"Warmest" is the lowest colour temperature the app will send to that light. Raise it if a light turns orange or red instead of warm white. "Fade" is how long lights without a plug take to dim, brighten or switch off.</p>
+        <p class="note">"Warmest" is the lowest colour temperature the app will send to that light. Raise it if a light turns orange or red instead of warm white. "Fade" (seconds) makes lights without a plug dim and brighten gradually; 0 means instant.</p>
         <div class="list" id="light-list"></div>
         <div class="row"><button id="find-lights">Look for new lights</button><button class="primary" id="save-lights">Save lights</button></div>
         <div class="list" id="found-lights"></div>
@@ -576,7 +576,7 @@ details.part.off { opacity: .55; }
       <div class="field" style="width:6.5rem"><label for="wk-${key}">Warmest (K)</label>
         <input type="number" inputmode="numeric" id="wk-${key}" min="${lt.hw_min_kelvin || 2000}" max="${(lt.max_kelvin || 9000) - 100}" step="100" value="${lt.min_kelvin || 2000}"></div>
       ${lt.power_plug ? "" : `<div class="field" style="width:5.5rem"><label for="fs-${key}">Fade (s)</label>
-        <input type="number" inputmode="numeric" id="fs-${key}" min="0" max="60" value="${lt.fade_seconds ?? 12}"></div>`}</div>`).join("");
+        <input type="number" inputmode="numeric" id="fs-${key}" min="0" max="60" value="${lt.fade_seconds ?? 0}"></div>`}</div>`).join("");
   }
   let foundLights = [];
   async function findLights() {
@@ -694,7 +694,7 @@ details.part.off { opacity: .55; }
       if (f === 1) return;
     }
   }
-  const fadeOf = (lt) => (lt.power_plug ? 0 : lt.fade_seconds ?? 12);
+  const fadeOf = (lt) => (lt.power_plug ? 0 : lt.fade_seconds ?? 0);
 
   async function setLight(key, kelvin, brightness) {
     const lt = cfg.govee_lights[key];
@@ -749,13 +749,17 @@ details.part.off { opacity: .55; }
             await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
             for (const b of [25, 8, 1]) { await sleep(1200); await goveeCmd(lt, "devices.capabilities.range", "brightness", b); }
             await sleep(1200);
-          } else {
+          } else if (fadeOf(lt)) {
             await smooth(lt);
             const st = await goveeState(lt);
             if (st.powerSwitch === 0) return; // already off
             await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
-            await fadeBrightness(lt, st.brightness || 60, 1, fadeOf(lt) || 2);
+            await fadeBrightness(lt, st.brightness || 60, 1, fadeOf(lt));
             await sleep(1500);
+          } else {
+            // no fade: just leave it warm and dim for next time, then off
+            await goveeCmd(lt, "devices.capabilities.color_setting", "colorTemperatureK", lt.min_kelvin || 2000);
+            await goveeCmd(lt, "devices.capabilities.range", "brightness", 1);
           }
         } catch (e) { if (!lt.power_plug) throw e; /* already unpowered: just cut the power */ }
         if (lt.power_plug) await shellyCmd(lt.power_plug, false);
